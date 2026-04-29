@@ -52,7 +52,10 @@ class PlatoClient:
         offset: int = 0,
         q: Optional[str] = None,
     ) -> QueryResult:
-        """Query tiles with rich filtering and pagination."""
+        """Query tiles with rich filtering and pagination.
+        
+        Falls back to /export on older PLATO servers that don't have /query.
+        """
         payload = {
             "table": table,
             "limit": min(limit, 500),
@@ -65,15 +68,62 @@ class PlatoClient:
         if q:
             payload["q"] = q
 
+        # Try modern /query endpoint
         result = self._request("POST", "/query", payload)
-        if "results" in result:
+        if "results" in result and result.get("status") != "error":
             return QueryResult(
                 results=result["results"],
                 total=result.get("total", len(result["results"])),
                 limit=result.get("limit", limit),
                 offset=result.get("offset", offset),
             )
-        return QueryResult(results=[], total=0, limit=limit, offset=offset)
+
+        # Fallback: old PLATO API via /export
+        export = self._request("GET", "/export/plato-tile-spec")
+        tiles = export.get("tiles", export if isinstance(export, list) else [])
+        if not tiles:
+            # Try alternate export format
+            tiles = export.get("data", []) if isinstance(export, dict) else []
+        
+        # Apply filters client-side
+        filtered = tiles
+        if where:
+            for field, spec in where.items():
+                if isinstance(spec, dict) and "op" in spec:
+                    op, val = spec["op"], spec["val"]
+                    if op == "eq":
+                        filtered = [t for t in filtered if t.get(field) == val]
+                    elif op == "regex":
+                        import re
+                        filtered = [t for t in filtered if re.search(val, str(t.get(field, "")))]
+                    elif op == "contains":
+                        filtered = [t for t in filtered if val in str(t.get(field, ""))]
+                else:
+                    filtered = [t for t in filtered if t.get(field) == spec]
+        
+        if q:
+            q_lower = q.lower()
+            filtered = [
+                t for t in filtered 
+                if q_lower in str(t.get("question", "")).lower() 
+                or q_lower in str(t.get("answer", "")).lower()
+            ]
+        
+        # Apply sort client-side
+        if sort:
+            for field, direction in reversed(sort):
+                reverse = direction.lower() == "desc"
+                filtered.sort(key=lambda t: t.get(field, 0), reverse=reverse)
+        
+        total = len(filtered)
+        paginated = filtered[offset:offset + limit]
+        
+        return QueryResult(
+            results=paginated,
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
 
     def get_tile(self, domain: str, question: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Fetch a single tile by domain + optional question match."""

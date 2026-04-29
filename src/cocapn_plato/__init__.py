@@ -7,6 +7,7 @@ from .engine.query import QueryEngine
 from .engine.plato_bridge import PlatoBridge
 from .sdk.client import PlatoClient, QueryResult
 from .sdk.fleet import Fleet as SdkFleet
+from .sdk.skills import RateAwareSkill, UsageTracker, SkillUsage, SkillScore
 
 __all__ = [
     "Fleet",
@@ -20,4 +21,8 @@ __all__ = [
     "PlatoClient",
     "QueryResult",
     "SdkFleet",
+    "RateAwareSkill",
+    "UsageTracker",
+    "SkillUsage",
+    "SkillScore",
 ]
