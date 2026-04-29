@@ -38,7 +38,8 @@ def test_equality_filter(sample_tiles):
 
 def test_regex_filter(sample_tiles):
     r = sample_tiles.query("tiles", where={"question": {"op": "regex", "val": "^What"}})
-    assert len(r["results"]) == 2
+    assert len(r["results"]) == 1
+    assert r["results"][0]["question"] == "What is the harbor?"
 
 
 def test_contains_filter(sample_tiles):
