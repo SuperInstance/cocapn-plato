@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PLATO Tile Explorer</title>
+<style>
+:root{--accent:#00E6D6;--bg:#06060c;--bg-panel:#11111f;--text:#e2e2f0;--text-dim:#8b8faa;--border:#1a1a30}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;padding:1rem}
+header{max-width:900px;margin:0 auto 1rem}
+h1{font-size:1.2rem;color:var(--accent);font-weight:700}
+.meta{color:var(--text-dim);font-size:.8rem}
+.controls{max-width:900px;margin:0 auto 1rem;display:flex;gap:.5rem;flex-wrap:wrap}
+input,select,button{padding:.5rem .7rem;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:.85rem}
+input:focus,select:focus{border-color:var(--accent);outline:none}
+button{background:var(--accent);color:var(--bg);border:none;font-weight:600;cursor:pointer}
+button:hover{opacity:.9}
+.results{max-width:900px;margin:0 auto}
+.tile{background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:.75rem;transition:.2s}
+.tile:hover{border-color:var(--accent)}
+.tile-header{display:flex;gap:.5rem;margin-bottom:.5rem;font-size:.75rem;color:var(--text-dim)}
+.tile-header .domain{color:var(--accent);font-weight:600}
+.tile-header .agent{color:var(--text-dim)}
+.tile-question{font-weight:600;margin-bottom:.3rem;font-size:.9rem}
+.tile-answer{color:var(--text-dim);font-size:.85rem;line-height:1.6}
+.stats{color:var(--text-dim);font-size:.8rem;margin-bottom:1rem;max-width:900px;margin:0 auto 1rem}
+</style>
+</head>
+<body>
+<header>
+<h1>PLATO Tile Explorer</h1>
+<p class="meta">Query PLATO tiles with filtering, sorting, and full-text search</p>
+</header>
+
+<div class="controls">
+<input type="text" id="q" placeholder="Search..." value="">
+<select id="domain"><option value="">All domains</option></select>
+<input type="text" id="agent" placeholder="Agent" value="">
+<select id="sort">
+<option value="timestamp:desc">Newest first</option>
+<option value="timestamp:asc">Oldest first</option>
+<option value="confidence:desc">Highest confidence</option>
+</select>
+<input type="number" id="limit" placeholder="Limit" value="20" min="1" max="100" style="width:70px">
+<button onclick="search()">Search</button>
+<button onclick="loadDomains()" class="secondary" style="background:var(--bg-panel);color:var(--text)">Refresh Domains</button>
+</div>
+
+<div class="stats" id="stats"></div>
+<div class="results" id="results"></div>
+
+<script>
+const API = window.location.search.includes('remote') ? 'http://147.224.38.131:8847' : '';
+
+async function api(path, method='GET', body=null) {
+  const url = API ? `${API}${path}` : path;
+  const opts = {method, headers:{'Accept':'application/json'}};
+  if (body) {opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(body);}
+  const r = await fetch(url, opts);
+  return r.json();
+}
+
+async function loadDomains() {
+  const domains = await api('/aggregate?table=tiles&group_by=domain');
+  const sel = document.getElementById('domain');
+  sel.innerHTML = '<option value="">All domains</option>';
+  if (Array.isArray(domains)) {
+    domains.sort((a,b)=>b.count-a.count).forEach(d=>{
+      sel.innerHTML += `<option value="${d._key}">${d._key} (${d.count})</option>`;
+    });
+  }
+}
+
+async function search() {
+  const q = document.getElementById('q').value;
+  const domain = document.getElementById('domain').value;
+  const agent = document.getElementById('agent').value;
+  const sort = document.getElementById('sort').value;
+  const limit = parseInt(document.getElementById('limit').value) || 20;
+  
+  const where = {};
+  if (domain) where.domain = domain;
+  if (agent) where.agent = agent;
+  
+  const [field, dir] = sort.split(':');
+  const body = {table:'tiles', where:Object.keys(where).length?where:null, sort:[[field,dir]], limit, offset:0};
+  if (q) body.q = q;
+  
+  document.getElementById('results').innerHTML = '<div class="stats">Loading...</div>';
+  
+  const data = await api('/query', 'POST', body);
+  
+  const total = data.total || 0;
+  const results = data.results || [];
+  document.getElementById('stats').textContent = `${total} tiles found, showing ${results.length}`;
+  
+  document.getElementById('results').innerHTML = results.map(t=>`
+    <div class="tile">
+      <div class="tile-header">
+        <span class="domain">${t.domain||'?'}</span>
+        <span class="agent">${t.agent||'?'}</span>
+        <span>${t.timestamp ? new Date(t.timestamp*1000).toLocaleString() : ''}</span>
+      </div>
+      <div class="tile-question">${escapeHtml(t.question||'N/A')}</div>
+      <div class="tile-answer">${escapeHtml(t.answer||'').substring(0,300)}${(t.answer||'').length>300?'...':''}</div>
+    </div>
+  `).join('') || '<div class="stats">No results</div>';
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Initial load
+loadDomains();
+search();
+</script>
+</body>
+</html>
