@@ -80,12 +80,24 @@ class PlatoClient:
 
         # Fallback: old PLATO API via /export
         export = self._request("GET", "/export/plato-tile-spec")
-        tiles = export.get("tiles", export if isinstance(export, list) else [])
-        if not tiles:
-            # Try alternate export format
-            tiles = export.get("data", []) if isinstance(export, dict) else []
         
-        # Apply filters client-side
+        # Try multiple possible tile locations in export response
+        tiles = []
+        if isinstance(export, list):
+            tiles = export
+        elif isinstance(export, dict):
+            for key in ["tiles", "data", "records", "items", "results"]:
+                if key in export and isinstance(export[key], list):
+                    tiles = export[key]
+                    break
+            # If no list found, check if the dict itself is a single tile
+            if not tiles and "question" in export:
+                tiles = [export]
+        
+        if not tiles:
+            return QueryResult(results=[], total=0, limit=limit, offset=offset)
+        
+        # Apply filters client-side (skip if tile format doesn't match)
         filtered = tiles
         if where:
             for field, spec in where.items():
@@ -101,12 +113,17 @@ class PlatoClient:
                 else:
                     filtered = [t for t in filtered if t.get(field) == spec]
         
-        if q:
+        if q and q_fields:
             q_lower = q.lower()
             filtered = [
                 t for t in filtered 
-                if q_lower in str(t.get("question", "")).lower() 
-                or q_lower in str(t.get("answer", "")).lower()
+                if any(q_lower in str(t.get(f, "")).lower() for f in q_fields if f in t)
+            ]
+        elif q:
+            q_lower = q.lower()
+            filtered = [
+                t for t in filtered 
+                if any(q_lower in str(v).lower() for v in t.values() if isinstance(v, str))
             ]
         
         # Apply sort client-side
@@ -135,11 +152,19 @@ class PlatoClient:
 
     def list_domains(self) -> List[str]:
         """List all unique tile domains."""
-        # Uses aggregate endpoint
+        # Try aggregate endpoint first
         result = self._request("POST", "/aggregate", {"table": "tiles", "group_by": "domain"})
-        if isinstance(result, list):
+        if isinstance(result, list) and result and "_key" in result[0]:
             return [r["_key"] for r in result]
-        return []
+        
+        # Fallback: scan all tiles and extract unique domains client-side
+        qr = self.query(limit=500)
+        domains = set()
+        for t in qr.results:
+            d = t.get("domain")
+            if d:
+                domains.add(d)
+        return sorted(domains)
 
     def health(self) -> Dict[str, Any]:
         return self._request("GET", "/health")
