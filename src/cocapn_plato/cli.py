@@ -41,8 +41,16 @@ def main():
     s.add_argument("--question", required=True)
     s.add_argument("--answer", required=True)
 
+    # migrate
+    m = sub.add_parser("migrate", help="Run tile migration pipeline (normalize, dedup, score)")
+    m.add_argument("input", help="Input JSON or JSONL file (or 'plato' to fetch from remote)")
+    m.add_argument("--output", help="Output JSONL file (default: stdout)")
+    m.add_argument("--fuzzy", action="store_true", help="Use fuzzy deduplication (slower)")
+    m.add_argument("--stats-only", action="store_true", help="Only print stats, don't write tiles")
+    m.add_argument("--url", default="http://147.224.38.131:8847", help="PLATO URL if input='plato'")
+
     args = parser.parse_args()
-    client = PlatoClient(args.url)
+    client = PlatoClient(args.url if args.cmd == "migrate" and args.input == "plato" else args.url)
 
     if args.cmd == "query":
         where = {}
@@ -93,6 +101,46 @@ def main():
                 print(line)
         else:
             print(json.dumps(result, indent=2, default=str))
+
+    elif args.cmd == "migrate":
+        from cocapn_plato.engine.migrate import pipeline
+        import urllib.request
+
+        if args.input == "plato":
+            print(f"Fetching tiles from {args.url}...")
+            req = urllib.request.Request(f"{args.url}/export/plato-tile-spec", headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                raw = json.loads(resp.read().decode())
+            if isinstance(raw, dict):
+                for key in ["tiles", "data", "records"]:
+                    if key in raw and isinstance(raw[key], list):
+                        raw = raw[key]
+                        break
+        else:
+            with open(args.input) as f:
+                raw = [json.loads(line) for line in f if line.strip()]
+
+        print(f"Running pipeline on {len(raw)} raw tiles...")
+        result = pipeline(raw, fuzzy=args.fuzzy)
+        stats = result["stats"]
+
+        print(f"\n📊 Stats:")
+        print(f"  Raw:        {stats['raw_count']}")
+        print(f"  Normalized: {stats['normalized_count']}")
+        print(f"  Unique:     {stats['unique_count']}")
+        print(f"  Dups:       {stats['dups_removed']}")
+        print(f"  Unrecoverable: {stats['unrecoverable']}")
+        print(f"  Avg Quality: {stats['avg_quality']}")
+        print(f"\nTop Domains: {', '.join(f'{d}({c})' for d,c in stats['top_domains'][:5])}")
+        print(f"Top Agents:  {', '.join(f'{a}({c})' for a,c in stats['top_agents'][:5])}")
+
+        if not args.stats_only:
+            out = sys.stdout if not args.output else open(args.output, "w")
+            for tile in result["tiles"]:
+                out.write(json.dumps(tile, ensure_ascii=False) + "\n")
+            if args.output:
+                out.close()
+                print(f"\nWrote {len(result['tiles'])} tiles to {args.output}")
 
     elif args.cmd == "status":
         data = client.status()
