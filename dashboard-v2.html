@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cocapn Fleet — Live Dashboard v2</title>
+<style>
+:root{--accent:#00E6D6;--bg:#06060c;--bg-panel:#11111f;--bg-elevated:#0c0c18;--text:#e2e2f0;--text-dim:#8b8faa;--text-faint:#4a4e6a;--border:#1a1a30;--green:#22C55E;--red:#EF4444;--yellow:#F59E0B}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;min-height:100vh;padding:1rem}
+header{max-width:1200px;margin:0 auto 1.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem}
+h1{font-size:1.4rem;color:var(--accent);font-weight:700}
+.live-pulse{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse 2.5s infinite;box-shadow:0 0 8px var(--green)}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+.refresh-btn{background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:.4rem .8rem;border-radius:6px;cursor:pointer;font-size:.8rem}
+.refresh-btn:hover{border-color:var(--accent)}
+.status-bar{max-width:1200px;margin:0 auto 1.5rem;font-size:.8rem;color:var(--text-dim)}
+.grid{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem}
+.card{background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;padding:1.2rem;transition:.2s}
+.card:hover{border-color:var(--border-light)}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.8rem}
+.card-title{font-size:.85rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
+.card-badge{font-size:.7rem;padding:.2em .6em;border-radius:12px;background:rgba(0,230,214,.12);color:var(--accent);font-weight:600}
+.card-value{font-size:2rem;font-weight:700;color:var(--text);margin:.3rem 0}
+.card-detail{font-size:.75rem;color:var(--text-dim);line-height:1.6}
+.card-detail.up{color:var(--green)}
+.card-detail.down{color:var(--red)}
+.service-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.5rem;margin-top:.5rem}
+.svc{padding:.5rem .7rem;border-radius:6px;font-size:.75rem;background:var(--bg-elevated);border:1px solid var(--border);display:flex;align-items:center;gap:.5rem}
+.svc.ok{border-left:3px solid var(--green)}
+.svc.down{border-left:3px solid var(--red)}
+.svc.warn{border-left:3px solid var(--yellow)}
+.svc-name{font-weight:600}
+.svc-status{color:var(--text-dim);font-size:.7rem}
+.tile-list{max-height:200px;overflow-y:auto;margin-top:.5rem}
+.tile-item{padding:.5rem 0;border-bottom:1px solid var(--border);font-size:.75rem}
+.tile-item:last-child{border-bottom:none}
+.tile-q{color:var(--text);font-weight:500}
+.tile-meta{color:var(--text-faint);font-size:.7rem}
+.domain-bar{display:flex;align-items:center;gap:.5rem;margin:.3rem 0;font-size:.75rem}
+.domain-bar .bar{height:6px;border-radius:3px;background:var(--accent);min-width:2px}
+.domain-bar .label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.domain-bar .count{color:var(--text-dim);font-size:.7rem}
+.error{padding:1rem;background:rgba(239,68,68,.1);border:1px solid var(--red);border-radius:8px;color:var(--red);font-size:.8rem;margin:1rem 0;max-width:1200px;margin:1rem auto}
+@media(max-width:600px){.grid{grid-template-columns:1fr}header{flex-direction:column;align-items:flex-start}}
+</style>
+</head>
+<body>
+<header>
+<div style="display:flex;align-items:center;gap:.6rem">
+<span class="live-pulse"></span>
+<h1>Cocapn Fleet — Live</h1>
+</div>
+<button class="refresh-btn" onclick="refreshAll()">↻ Refresh</button>
+</header>
+
+<div class="status-bar" id="status">Connecting to fleet...</div>
+
+<div id="error-container"></div>
+
+<div class="grid" id="grid">
+<div class="card">
+<div class="card-header"><span class="card-title">PLATO Tiles</span><span class="card-badge" id="tile-badge">Live</span></div>
+<div class="card-value" id="tile-count">—</div>
+<div class="card-detail" id="tile-detail">Fetching from 147.224.38.131:8847</div>
+<div class="tile-list" id="tile-list"></div>
+</div>
+
+<div class="card">
+<div class="card-header"><span class="card-title">PLATO Rooms</span><span class="card-badge">MUD + Virtual</span></div>
+<div class="card-value" id="room-count">—</div>
+<div class="card-detail" id="room-detail">MUD rooms + virtual PLATO rooms</div>
+</div>
+
+<div class="card">
+<div class="card-header"><span class="card-title">Fleet Services</span><span class="card-badge" id="svc-badge">Scanning</span></div>
+<div class="card-value" id="svc-count">—</div>
+<div class="card-detail" id="svc-detail">12/18 up (6 down)</div>
+<div class="service-grid" id="service-grid"></div>
+</div>
+
+<div class="card">
+<div class="card-header"><span class="card-title">Top Domains</span><span class="card-badge">By Tiles</span></div>
+<div id="domain-list"></div>
+</div>
+
+<div class="card">
+<div class="card-header"><span class="card-title">Top Agents</span><span class="card-badge">By Tiles</span></div>
+<div id="agent-list"></div>
+</div>
+
+<div class="card">
+<div class="card-header"><span class="card-title">Arena</span><span class="card-badge">Combat</span></div>
+<div class="card-value" id="arena-matches">—</div>
+<div class="card-detail" id="arena-detail">Matches played</div>
+</div>
+
+<div class="card">
+<div class="card-header"><span class="card-title">Grammar</span><span class="card-badge">Engine</span></div>
+<div class="card-value" id="grammar-rules">—</div>
+<div class="card-detail" id="grammar-detail">Active rules</div>
+</div>
+
+<div class="card">
+<div class="card-header"><span class="card-title">Matrix</span><span class="card-badge">Bridge</span></div>
+<div class="card-value" id="matrix-rooms">—</div>
+<div class="card-detail" id="matrix-detail">Bridged rooms</div>
+</div>
+</div>
+
+<script>
+const PLATO = "http://147.224.38.131:8847";
+const MUD = "http://147.224.38.131:4042";
+const ARENA = "http://147.224.38.131:4044";
+const GRAMMAR = "http://147.224.38.131:4045";
+const COMPACTOR = "http://147.224.38.131:4055";
+const RATE = "http://147.224.38.131:4056";
+const SKILL = "http://147.224.38.131:4057";
+const TERMINAL = "http://147.224.38.131:4060";
+const SHELL = "http://147.224.38.131:8848";
+const MATRIX = "http://147.224.38.131:6168";
+const CONDUIT = "http://147.224.38.131:6167";
+const DASHBOARD = "http://147.224.38.131:4046";
+const NEXUS = "http://147.224.38.131:4047";
+const HARBOR = "http://147.224.38.131:4050";
+
+const SERVICES = [
+  {name:"MUD v3", url:MUD+"/status", ok:false, key:"rooms"},
+  {name:"Arena", url:ARENA+"/stats", ok:false, key:"total_matches"},
+  {name:"Grammar", url:GRAMMAR+"/grammar", ok:false, key:"total_rules"},
+  {name:"Compactor", url:COMPACTOR+"/status", ok:false, key:"total_rules"},
+  {name:"Rate-Attn", url:RATE+"/streams", ok:false},
+  {name:"SkillForge", url:SKILL+"/status", ok:false},
+  {name:"PLATOTerm", url:TERMINAL+"/", ok:false},
+  {name:"PLATOGate", url:PLATO+"/rooms", ok:false, key:"rooms"},
+  {name:"PLATOShell", url:SHELL+"/", ok:false},
+  {name:"Matrix", url:MATRIX+"/status", ok:false, key:"rooms"},
+  {name:"Conduit", url:CONDUIT+"/", ok:false},
+  {name:"Dashboard", url:DASHBOARD+"/", ok:false},
+  {name:"Nexus", url:NEXUS+"/", ok:false},
+  {name:"Harbor", url:HARBOR+"/", ok:false},
+];
+
+let allTiles = [];
+
+async function fetchJSON(url, timeout=6000) {
+  const c = new AbortController();
+  setTimeout(()=>c.abort(), timeout);
+  try {
+    const r = await fetch(url, {signal:c.signal, mode:"cors"});
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+async function refreshAll() {
+  document.getElementById("status").textContent = "Refreshing...";
+  document.getElementById("error-container").innerHTML = "";
+
+  // 1. PLATO tiles + rooms
+  const plato = await fetchJSON(PLATO+"/export/plato-tile-spec", 8000);
+  let tiles = [], rooms = [];
+  if (plato && Array.isArray(plato)) tiles = plato;
+  else if (plato && plato.data) tiles = plato.data;
+  else if (plato && plato.tiles) tiles = plato.tiles;
+
+  const roomData = await fetchJSON(PLATO+"/rooms", 5000);
+  if (roomData && Array.isArray(roomData)) rooms = roomData;
+  else if (roomData && roomData.rooms) rooms = roomData.rooms;
+
+  allTiles = tiles;
+  document.getElementById("tile-count").textContent = tiles.length.toLocaleString();
+  document.getElementById("tile-detail").textContent = `Fetched ${tiles.length} tiles`;
+  document.getElementById("room-count").textContent = rooms.length.toLocaleString();
+  document.getElementById("room-detail").textContent = `${rooms.length} PLATO rooms + ~39 MUD`;
+
+  // Recent tiles
+  const recent = tiles.slice(-5).reverse();
+  document.getElementById("tile-list").innerHTML = recent.map(t=>`
+    <div class="tile-item">
+      <div class="tile-q">${escape(t.question||t.title||"Untitled")}</div>
+      <div class="tile-meta">${t.domain||"?"} • ${t.agent||t.creator||"?"}</div>
+    </div>
+  `).join("") || "<div class='tile-item'><div class='tile-meta'>No tiles</div></div>";
+
+  // Domain breakdown
+  const domains = {};
+  tiles.forEach(t=>{const d=t.domain||t.room||"unknown";domains[d]=(domains[d]||0)+1});
+  const domSorted = Object.entries(domains).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const maxDom = domSorted[0]?.[1]||1;
+  document.getElementById("domain-list").innerHTML = domSorted.map(([d,c])=>`
+    <div class="domain-bar">
+      <div class="bar" style="width:${(c/maxDom*100).toFixed(1)}%"></div>
+      <span class="label">${d}</span>
+      <span class="count">${c}</span>
+    </div>
+  `).join("") || "<div class='card-detail'>No data</div>";
+
+  // Agent breakdown
+  const agents = {};
+  tiles.forEach(t=>{const a=t.agent||t.creator||"unknown";agents[a]=(agents[a]||0)+1});
+  const agentSorted = Object.entries(agents).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const maxAgent = agentSorted[0]?.[1]||1;
+  document.getElementById("agent-list").innerHTML = agentSorted.map(([a,c])=>`
+    <div class="domain-bar">
+      <div class="bar" style="width:${(c/maxAgent*100).toFixed(1)}%"></div>
+      <span class="label">${a}</span>
+      <span class="count">${c}</span>
+    </div>
+  `).join("") || "<div class='card-detail'>No data</div>";
+
+  // 2. Arena
+  const arena = await fetchJSON(ARENA+"/stats", 5000);
+  if (arena && arena.total_matches !== undefined) {
+    document.getElementById("arena-matches").textContent = arena.total_matches;
+    document.getElementById("arena-detail").textContent = `${arena.total_players||0} players • ${arena.total_archetypes||0} archetypes`;
+  } else {
+    document.getElementById("arena-matches").textContent = "—";
+    document.getElementById("arena-detail").textContent = "Arena unreachable";
+  }
+
+  // 3. Grammar
+  const grammar = await fetchJSON(GRAMMAR+"/grammar", 5000);
+  if (grammar && grammar.total_rules !== undefined) {
+    document.getElementById("grammar-rules").textContent = grammar.total_rules;
+    document.getElementById("grammar-detail").textContent = `Engine rules (compactor sees ${grammar.compactor_rules||"?"})`;
+  } else {
+    document.getElementById("grammar-rules").textContent = "—";
+    document.getElementById("grammar-detail").textContent = "Grammar unreachable";
+  }
+
+  // 4. Matrix
+  const matrix = await fetchJSON(MATRIX+"/status", 5000);
+  if (matrix && matrix.rooms !== undefined) {
+    document.getElementById("matrix-rooms").textContent = matrix.rooms;
+    document.getElementById("matrix-detail").textContent = `${matrix.agents||0} agents connected`;
+  } else {
+    document.getElementById("matrix-rooms").textContent = "—";
+    document.getElementById("matrix-detail").textContent = "Matrix unreachable";
+  }
+
+  // 5. Service health checks
+  let up = 0, down = 0;
+  const svcHTML = [];
+  for (const svc of SERVICES) {
+    const data = await fetchJSON(svc.url, 4000);
+    svc.ok = !!data;
+    if (svc.ok) up++; else down++;
+    const cls = svc.ok ? "ok" : "down";
+    const extra = svc.key && data && data[svc.key] !== undefined ? ` | ${data[svc.key]}` : "";
+    svcHTML.push(`<div class="svc ${cls}"><span class="svc-name">${svc.name}</span><span class="svc-status">${svc.ok?"UP":"DOWN"}${extra}</span></div>`);
+  }
+  document.getElementById("svc-count").textContent = `${up}/${SERVICES.length}`;
+  document.getElementById("svc-detail").textContent = `${up} up, ${down} down`;
+  document.getElementById("svc-badge").textContent = down === 0 ? "All Up" : `${down} Down`;
+  document.getElementById("svc-badge").style.background = down === 0 ? "rgba(34,197,94,.2)" : "rgba(239,68,68,.12)";
+  document.getElementById("svc-badge").style.color = down === 0 ? "var(--green)" : "var(--red)";
+  document.getElementById("service-grid").innerHTML = svcHTML.join("");
+
+  const now = new Date().toLocaleTimeString();
+  document.getElementById("status").textContent = `Last refresh: ${now} • ${tiles.length.toLocaleString()} tiles • ${up}/${SERVICES.length} services up`;
+}
+
+function escape(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Auto-refresh every 30s
+refreshAll();
+setInterval(refreshAll, 30000);
+</script>
+</body>
+</html>
