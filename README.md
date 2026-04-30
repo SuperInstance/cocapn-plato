@@ -1,15 +1,22 @@
 # cocapn-plato
 
-Cocapn Fleet PLATO engine — query API + SDK + bridge.
+Cocapn Fleet PLATO engine — query API + SDK + bridge + queue + watchdog.
 
 ## What
 
 Oracle1's engine was submission-only: tiles go in, nothing comes back out. This package fixes that.
 
-- **QueryEngine**: Rich querying with filtering, sorting, pagination, full-text search, aggregation
+- **QueryEngine**: Rich querying with 11 operators, sorting, pagination, full-text search, aggregation
 - **PlatoBridge**: Two-way sync between local Fleet() and remote PLATO servers
 - **SDK**: Python client — `Fleet().query(domain="harbor", q="valve", sort="timestamp:desc")`
-- **Server**: FastAPI with `/query`, `/aggregate`, `/bridge/submit`, `/bridge/query`
+- **Server**: FastAPI with `/query`, `/aggregate`, `/bridge/*`, `/queue/*`
+- **CLI**: `cocapn query`, `cocapn submit`, `cocapn migrate`, `cocapn queue`
+- **Explorer**: Single-page HTML dashboard for browsing tiles
+- **Dashboard v2**: Live fleet status dashboard
+- **Task Queue**: Submit/claim/complete/fail with retry logic
+- **Watchdog**: Alert when fleet services go down or recover
+- **Migration Pipeline**: Normalize, deduplicate, score old PLATO v2 tiles
+- **Benchmarks**: 10K tile stress tests
 
 ## Install
 
@@ -38,6 +45,30 @@ for tile in results:
 
 # Domains
 print(fleet.domains())  # ['harbor', 'forge', 'archives', ...]
+```
+
+### CLI
+
+```bash
+# Query tiles
+cocapn query --domain harbor --q valve --limit 10
+
+# Submit tile
+cocapn submit --agent ccc --domain harbor --question "Q" --answer "A"
+
+# Aggregate by domain
+cocapn aggregate --group-by domain
+
+# Run migration pipeline
+cocapn migrate plato --output tiles.jsonl --stats-only
+
+# Task queue
+cocapn queue submit --payload '{"action":"scrape"}'
+cocapn queue claim --worker bot-1
+cocapn queue list --status pending
+
+# Watchdog (daemon mode)
+python -m cocapn_plato.watch --fleet --interval 30 --webhook https://hooks.example.com/alerts
 ```
 
 ### Server
