@@ -1,0 +1,30 @@
+# Systemd service template for fleet services
+# Install: sudo cp config/systemd-fleet@.service /etc/systemd/system/
+# Enable:  sudo systemctl enable fleet@dashboard
+# Start:   sudo systemctl start fleet@dashboard
+# Status:  sudo systemctl status fleet@dashboard
+
+[Unit]
+Description=Cocapn Fleet Service — %i
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/.openclaw/workspace
+Environment="HOME=/home/ubuntu"
+Environment="USER=ubuntu"
+# NOTE: Replace with actual module path for each service
+ExecStart=/usr/bin/python3 -m %i.server --port %p
+Restart=always
+RestartSec=5
+StartLimitInterval=60s
+StartLimitBurst=3
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fleet-%i
+
+[Install]
+WantedBy=multi-user.target
