@@ -260,4 +260,67 @@ def create_app(fleet_instance: Optional[Fleet] = None) -> FastAPI:
         fleet = get_fleet()
         return await fleet.status()
 
+    # --- Task Queue ---
+    from ..engine.queue import TaskQueue
+
+    _queue: Optional[TaskQueue] = None
+
+    def get_queue() -> TaskQueue:
+        global _queue
+        if _queue is None:
+            _queue = TaskQueue("./fleet_data/tasks.jsonl")
+        return _queue
+
+    class TaskSubmit(BaseModel):
+        payload: Dict[str, Any]
+        priority: int = 0
+        tags: List[str] = []
+        max_attempts: int = 3
+
+    class TaskComplete(BaseModel):
+        result: Optional[Dict[str, Any]] = None
+        error: Optional[str] = None
+
+    @app.post("/queue/submit")
+    async def queue_submit(body: TaskSubmit):
+        queue = get_queue()
+        task = queue.submit(body.payload, priority=body.priority, tags=body.tags, max_attempts=body.max_attempts)
+        return {"task": task.to_dict()}
+
+    @app.post("/queue/claim")
+    async def queue_claim(worker: str = "anonymous", tags: Optional[str] = None):
+        queue = get_queue()
+        tag_list = tags.split(",") if tags else None
+        task = queue.claim(worker=worker, tags=tag_list)
+        if task is None:
+            raise HTTPException(status_code=404, detail="No tasks available")
+        return {"task": task.to_dict()}
+
+    @app.post("/queue/{task_id}/complete")
+    async def queue_complete(task_id: str, body: TaskComplete):
+        queue = get_queue()
+        task = queue.complete(task_id, body.result)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return {"task": task.to_dict()}
+
+    @app.post("/queue/{task_id}/fail")
+    async def queue_fail(task_id: str, body: TaskComplete):
+        queue = get_queue()
+        task = queue.fail(task_id, body.error or "")
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return {"task": task.to_dict()}
+
+    @app.get("/queue/list")
+    async def queue_list(status: Optional[str] = None, limit: int = 50):
+        queue = get_queue()
+        tasks = queue.list(status=status, limit=limit)
+        return {"tasks": [t.to_dict() for t in tasks], "count": len(tasks)}
+
+    @app.get("/queue/stats")
+    async def queue_stats():
+        queue = get_queue()
+        return queue.stats()
+
     return app

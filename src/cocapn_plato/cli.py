@@ -41,13 +41,13 @@ def main():
     s.add_argument("--question", required=True)
     s.add_argument("--answer", required=True)
 
-    # migrate
-    m = sub.add_parser("migrate", help="Run tile migration pipeline (normalize, dedup, score)")
-    m.add_argument("input", help="Input JSON or JSONL file (or 'plato' to fetch from remote)")
-    m.add_argument("--output", help="Output JSONL file (default: stdout)")
-    m.add_argument("--fuzzy", action="store_true", help="Use fuzzy deduplication (slower)")
-    m.add_argument("--stats-only", action="store_true", help="Only print stats, don't write tiles")
-    m.add_argument("--url", default="http://147.224.38.131:8847", help="PLATO URL if input='plato'")
+    # queue
+    qu = sub.add_parser("queue", help="Task queue operations")
+    qu_sub = qu.add_subparsers(dest="queue_cmd")
+    qu_sub.add_parser("submit", help="Submit a task").add_argument("--payload", required=True, help="JSON payload")
+    qu_sub.add_parser("claim", help="Claim a task").add_argument("--worker", default="cli")
+    qu_sub.add_parser("list", help="List tasks").add_argument("--status")
+    qu_sub.add_parser("stats", help="Queue stats")
 
     args = parser.parse_args()
     client = PlatoClient(args.url if args.cmd == "migrate" and args.input == "plato" else args.url)
@@ -153,6 +153,26 @@ def main():
     elif args.cmd == "submit":
         result = client.submit(args.agent, args.question, args.answer, args.domain)
         print(json.dumps(result, indent=2, default=str))
+
+    elif args.cmd == "queue":
+        if args.queue_cmd == "submit":
+            payload = json.loads(args.payload)
+            result = client._request("POST", "/queue/submit", {"payload": payload})
+            print(json.dumps(result, indent=2, default=str))
+        elif args.queue_cmd == "claim":
+            result = client._request("POST", "/queue/claim", {"worker": args.worker})
+            print(json.dumps(result, indent=2, default=str))
+        elif args.queue_cmd == "list":
+            params = {}
+            if args.status:
+                params["status"] = args.status
+            result = client._request("GET", "/queue/list", params=params)
+            print(json.dumps(result, indent=2, default=str))
+        elif args.queue_cmd == "stats":
+            result = client._request("GET", "/queue/stats")
+            print(json.dumps(result, indent=2, default=str))
+        else:
+            qu.print_help()
 
     else:
         parser.print_help()
