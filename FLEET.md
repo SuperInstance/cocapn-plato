@@ -1,43 +1,60 @@
 # Cocapn Fleet — Package Ecosystem
 
-Three streamlined packages. Maximum capability in minimum lines.
+Streamlined packages. Maximum capability in minimum lines.
 
 | Package | Purpose | Tests | Lines | Repo |
 |---------|---------|-------|-------|------|
 | **cocapn-plato** | Query engine + SDK + server + queue + watchdog + orchestrator | 36 | ~3,500 | [SuperInstance/cocapn-plato](https://github.com/SuperInstance/cocapn-plato) |
 | **cocapn-traps** | Crab trap management — prompts that lure AI agents | 10 | ~700 | [SuperInstance/cocapn-traps](https://github.com/SuperInstance/cocapn-traps) |
 | **cocapn-health** | Fleet health checker — probe, diagnose, report | 5 | ~300 | [SuperInstance/cocapn-health](https://github.com/SuperInstance/cocapn-health) |
+| **cocapn-glue-core** | Keeper↔Fleet binary wire protocol (msgpack) | — | ~300 | [SuperInstance/cocapn-glue-core](https://github.com/SuperInstance/cocapn-glue-core) |
+| **flux-isa** | FLUX ISA v2.0 — 256-opcode instruction set reference | — | ~500 | [SuperInstance/flux-isa](https://github.com/SuperInstance/flux-isa) |
+| **flux-compiler** | Compile structured code to FLUX bytecode | — | ~300 | [SuperInstance/flux-compiler](https://github.com/SuperInstance/flux-compiler) |
+| **flux-plato-bridge** | Bidirectional bridge between FLUX VM and PLATO tiles | — | ~200 | [SuperInstance/flux-plato-bridge](https://github.com/SuperInstance/flux-plato-bridge) |
+| **git-agent-flux-pipeline** | Pipeline: git-agent → FLUX compiler → VM → PLATO | — | ~200 | [SuperInstance/git-agent-flux-pipeline](https://github.com/SuperInstance/git-agent-flux-pipeline) |
+| **domain-agent-base** | Shared base class for all 13 domain agents | — | ~130 | [SuperInstance/domain-agent-base](https://github.com/SuperInstance/domain-agent-base) |
 
-**Total: 51 tests, ~4,500 lines, zero external runtime dependencies.**
+**Core: 51 tests, ~4,500 lines. Ecosystem: ~6,500 lines total. Zero external runtime dependencies.**
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Cocapn Fleet                             │
-│                                                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │ cocapn-plato │  │ cocapn-traps│  │   cocapn-health     │  │
-│  │             │  │             │  │                     │  │
-│  │ • Query API │  │ • Trap reg  │  │ • Probe 18 ports   │  │
-│  │ • SDK       │  │ • Evaluator │  │ • Diagnose          │  │
-│  │ • Bridge    │  │ • Runner    │  │ • Report            │  │
-│  │ • Queue     │  │ • CLI       │  │ • CLI               │  │
-│  │ • Watchdog  │  │             │  │                     │  │
-│  │ • Migrate   │  │             │  │                     │  │
-│  │ • Dashboard │  │             │  │                     │  │
-│  │ • Explore   │  │             │  │                     │  │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
-│         │                │                  │                │
-│         └────────────────┴──────────────────┘                │
-│                          │                                   │
-│                    ┌─────┴─────┐                             │
-│                    │  PLATO    │ ← 147.224.38.131:8847       │
-│                    │  Server   │                               │
-│                    └───────────┘                               │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          Cocapn Fleet                                        │
+│                                                                              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  ┌─────────────┐ │
+│  │ cocapn-plato│  │ cocapn-traps│  │   cocapn-health     │  │cocapn-glue  │ │
+│  │             │  │             │  │                     │  │-core        │ │
+│  │ • Query API │  │ • Trap reg  │  │ • Probe 18 ports   │  │• msgpack   │ │
+│  │ • SDK       │  │ • Evaluator │  │ • Diagnose          │  │• heartbeat │ │
+│  │ • Bridge    │  │ • Runner    │  │ • Report            │  │• A2A       │ │
+│  │ • Queue     │  │ • CLI       │  │ • CLI               │  │             │ │
+│  │ • Watchdog  │  │             │  │                     │  │             │ │
+│  │ • Migrate   │  │             │  │                     │  │             │ │
+│  │ • Dashboard │  │             │  │                     │  │             │ │
+│  │ • Explore   │  │             │  │                     │  │             │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  └─────────────┘ │
+│         │                │                  │                  │            │
+│  ┌──────┴────────────────┴──────────────────┴──────────────────┴────────┐   │
+│  │                                                                       │   │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │   │
+│  │  │  flux-isa    │  │ flux-compiler│  │flux-plato   │  │ git-agent   │  │   │
+│  │  │             │  │             │  │ -bridge     │  │ -flux       │  │   │
+│  │  │• 256 opcodes│  │• structured │  │• tiles→byte │  │ pipeline    │  │   │
+│  │  │• encoder    │  │ →bytecode  │  │• VM↔PLATO  │  │• git→FLUX  │  │   │
+│  │  │• decoder    │  │• PLATO int │  │• bidirect. │  │• VM→PLATO  │  │   │
+│  │  │• ref VM     │  │             │  │             │  │             │  │   │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │   │
+│  │                              │                                        │   │
+│  │                              ▼                                        │   │
+│  │                    ┌───────────────┐                                    │   │
+│  │                    │  PLATO        │ ← 147.224.38.131:8847               │   │
+│  │                    │  Server       │                                    │   │
+│  │                    └───────────────┘                                    │   │
+│  └────────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -194,11 +211,17 @@ Fleet operational scripts (in `cocapn-plato/scripts/`):
 
 ## Version Matrix
 
-| Package | Version | Commit |
-|---------|---------|--------|
-| cocapn-plato | 3.2.0 | `0666631` |
-| cocapn-traps | 1.0.0 | `d98dca0` |
-| cocapn-health | 1.0.0 | `edddbeb` |
+| Package | Version | Commit | Language |
+|---------|---------|--------|----------|
+| cocapn-plato | 3.2.0 | `0666631` | Python |
+| cocapn-traps | 1.0.0 | `d98dca0` | Python |
+| cocapn-health | 1.0.0 | `edddbeb` | Python |
+| cocapn-glue-core | 0.1.0 | `d208a8c` | Python |
+| flux-isa | 0.1.0 | `ea3c126` | Python |
+| flux-compiler | 0.1.0 | `0fa343e` | Python |
+| flux-plato-bridge | 0.1.0 | `3d39d99` | Python |
+| git-agent-flux-pipeline | 0.1.0 | `cea30fb` | Python |
+| domain-agent-base | 0.1.0 | `3728158` | Python |
 
 ---
 
