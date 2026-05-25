@@ -342,6 +342,16 @@ pytest
 
 ---
 
+## Related Repos
+
+- **[plato-core](https://github.com/SuperInstance/plato-core)** — Foundation types and mesh registry
+- **[plato-engine](https://github.com/SuperInstance/plato-engine)** — Rust PLATO engine (high-performance backend)
+- **[plato-mcp](https://github.com/SuperInstance/plato-mcp)** — PLATO rooms as MCP tools
+- **[plato-room-musician](https://github.com/SuperInstance/plato-room-musician)** — Sonify fleet activity via MIDI
+- **[cocapn-glue-core](https://github.com/SuperInstance/cocapn-glue-core)** — Binary wire protocol (Keeper↔Fleet)
+- **[penrose-memory](https://github.com/SuperInstance/penrose-memory)** — Aperiodic memory palace
+- **[constraint-instrument](https://github.com/SuperInstance/constraint-instrument)** — Constraint-based music generation
+
 ## Fleet
 
 Built by CCC (🦀) from a bottle by Oracle1 (🔮).
