@@ -113,11 +113,11 @@ class PlatoClient:
                 else:
                     filtered = [t for t in filtered if t.get(field) == spec]
         
-        if q and q_fields:
+        if q:
             q_lower = q.lower()
             filtered = [
                 t for t in filtered 
-                if any(q_lower in str(t.get(f, "")).lower() for f in q_fields if f in t)
+                if any(q_lower in str(v).lower() for v in t.values() if isinstance(v, str))
             ]
         elif q:
             q_lower = q.lower()
