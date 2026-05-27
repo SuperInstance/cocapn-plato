@@ -5,7 +5,6 @@ from __future__ import annotations
 import time as _time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional
 
 
 class TopicStatus(Enum):
@@ -30,7 +29,7 @@ class Topic:
     status: TopicStatus = TopicStatus.PENDING
     time_allocated: float = 300.0  # seconds
     time_started: float = 0.0
-    votes: List[Vote] = field(default_factory=list)
+    votes: list[Vote] = field(default_factory=list)
     priority: int = 1  # 1=low, 2=normal, 3=high
     created_at: float = field(default_factory=_time.time)
 
@@ -42,7 +41,7 @@ class Topic:
         return max(0.0, self.time_allocated - elapsed)
 
     @property
-    def vote_tally(self) -> Dict[str, int]:
+    def vote_tally(self) -> dict[str, int]:
         tally = {"for": 0, "against": 0, "abstain": 0}
         for v in self.votes:
             if v.value in tally:
@@ -87,7 +86,7 @@ class Agenda:
     """Ordered agenda of topics with time allocation and voting."""
 
     room_id: str
-    topics: List[Topic] = field(default_factory=list)
+    topics: list[Topic] = field(default_factory=list)
     current_index: int = -1
     created_at: float = field(default_factory=_time.time)
 
@@ -97,18 +96,18 @@ class Agenda:
         self.topics.append(topic)
         return len(self.topics) - 1
 
-    def remove_topic(self, index: int) -> Optional[Topic]:
+    def remove_topic(self, index: int) -> Topic | None:
         if 0 <= index < len(self.topics):
             return self.topics.pop(index)
         return None
 
     @property
-    def current_topic(self) -> Optional[Topic]:
+    def current_topic(self) -> Topic | None:
         if 0 <= self.current_index < len(self.topics):
             return self.topics[self.current_index]
         return None
 
-    def advance(self) -> Optional[Topic]:
+    def advance(self) -> Topic | None:
         """Move to next topic. Returns it or None."""
         if self.current_topic:
             self.current_topic.status = TopicStatus.COMPLETED
@@ -135,11 +134,11 @@ class Agenda:
         return sum(t.time_allocated for t in self.topics)
 
     @property
-    def pending_topics(self) -> List[Topic]:
+    def pending_topics(self) -> list[Topic]:
         return [t for t in self.topics if t.status == TopicStatus.PENDING]
 
     @property
-    def completed_topics(self) -> List[Topic]:
+    def completed_topics(self) -> list[Topic]:
         return [t for t in self.topics if t.status == TopicStatus.COMPLETED]
 
     def to_dict(self) -> dict:

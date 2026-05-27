@@ -2,16 +2,21 @@
 
 import json
 import os
-import tempfile
 import time
 
-import pytest
-
 from cocapn_plato.engine.rooms import (
-    Agenda, Event, EventType, Moderator, Participant, Permission,
-    Role, Room, RoomHistory, Topic, TopicStatus, Vote,
+    Agenda,
+    Event,
+    EventType,
+    Moderator,
+    Participant,
+    Permission,
+    Role,
+    Room,
+    RoomHistory,
+    Topic,
+    TopicStatus,
 )
-
 
 # ---------------------------------------------------------------------------
 # Participant

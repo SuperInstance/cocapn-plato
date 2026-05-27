@@ -5,7 +5,6 @@ from __future__ import annotations
 import time as _time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional
 
 
 class Role(Enum):

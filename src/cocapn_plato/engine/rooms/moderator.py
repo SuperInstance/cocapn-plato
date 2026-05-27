@@ -5,7 +5,6 @@ from __future__ import annotations
 import time as _time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, List, Optional, Set
 
 from .participant import Participant, Permission
 
@@ -13,8 +12,8 @@ from .participant import Participant, Permission
 @dataclass
 class FloorState:
     """Tracks who has the floor and turn order."""
-    holder: Optional[str] = None
-    queue: Deque[str] = field(default_factory=deque)
+    holder: str | None = None
+    queue: deque[str] = field(default_factory=deque)
     granted_at: float = 0.0
     time_limit: float = 60.0  # seconds
 
@@ -25,9 +24,9 @@ class Moderator:
 
     room_id: str
     floor: FloorState = field(default_factory=FloorState)
-    speaking_order: List[str] = field(default_factory=list)
+    speaking_order: list[str] = field(default_factory=list)
     round_robin: bool = True
-    _spoken_this_round: Set[str] = field(default_factory=set)
+    _spoken_this_round: set[str] = field(default_factory=set)
     _turn_number: int = 0
 
     # -- floor control ----------------------------------------------------
@@ -47,7 +46,7 @@ class Moderator:
             self.floor.queue.append(name)
         return False
 
-    def release_floor(self, name: str) -> Optional[str]:
+    def release_floor(self, name: str) -> str | None:
         """Release the floor. Returns next holder or None."""
         if self.floor.holder != name:
             return None
@@ -61,7 +60,7 @@ class Moderator:
             self._grant(next_speaker)
         return next_speaker
 
-    def force_release(self) -> Optional[str]:
+    def force_release(self) -> str | None:
         """Force-release floor (e.g., time limit exceeded)."""
         if self.floor.holder is None:
             return None
@@ -78,7 +77,7 @@ class Moderator:
 
     # -- turn-taking ------------------------------------------------------
 
-    def set_speaking_order(self, names: List[str]) -> None:
+    def set_speaking_order(self, names: list[str]) -> None:
         self.speaking_order = list(names)
 
     def new_round(self) -> None:
@@ -105,7 +104,7 @@ class Moderator:
             pass
         return True
 
-    def _next_speaker(self) -> Optional[str]:
+    def _next_speaker(self) -> str | None:
         # First: try queue
         if self.floor.queue:
             return self.floor.queue.popleft()

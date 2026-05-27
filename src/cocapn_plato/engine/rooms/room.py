@@ -6,9 +6,8 @@ import json
 import time as _time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
 
-from .participant import Participant, Role, Permission
+from .participant import Participant
 
 
 @dataclass
@@ -19,10 +18,10 @@ class Room:
     name: str
     capacity: int = 50
     description: str = ""
-    participants: Dict[str, Participant] = field(default_factory=dict)
+    participants: dict[str, Participant] = field(default_factory=dict)
     created_at: float = field(default_factory=_time.time)
     state: dict = field(default_factory=dict)
-    _persist_dir: Optional[str] = field(default=None, repr=False)
+    _persist_dir: str | None = field(default=None, repr=False)
 
     # -- participant management -------------------------------------------
 
@@ -34,10 +33,10 @@ class Room:
         self.participants[participant.name] = participant
         return True
 
-    def leave(self, name: str) -> Optional[Participant]:
+    def leave(self, name: str) -> Participant | None:
         return self.participants.pop(name, None)
 
-    def get_participant(self, name: str) -> Optional[Participant]:
+    def get_participant(self, name: str) -> Participant | None:
         return self.participants.get(name)
 
     @property
@@ -49,7 +48,7 @@ class Room:
         return len(self.participants) >= self.capacity
 
     @property
-    def active_participants(self) -> List[Participant]:
+    def active_participants(self) -> list[Participant]:
         cutoff = _time.time() - 300  # 5 min
         return [p for p in self.participants.values() if p.last_active >= cutoff]
 
@@ -61,7 +60,7 @@ class Room:
     def get_state(self, key: str, default=None):
         return self.state.get(key, default)
 
-    def save(self, directory: Optional[str] = None) -> str:
+    def save(self, directory: str | None = None) -> str:
         d = directory or self._persist_dir or "."
         Path(d).mkdir(parents=True, exist_ok=True)
         path = Path(d) / f"room_{self.id}.json"
