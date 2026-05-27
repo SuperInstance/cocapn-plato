@@ -3,16 +3,17 @@
 Handles the full journey from raw PLATO v2 tiles to query-ready records.
 Maximum capability in minimum lines.
 """
+
 import json
 import re
-from typing import List, Dict, Any, Optional, Set
 from collections import Counter
 from difflib import SequenceMatcher
+from typing import Any
 
 
-def normalize(tile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def normalize(tile: dict[str, Any]) -> dict[str, Any] | None:
     """Normalize a tile from any old format to standard format.
-    
+
     Returns None if tile is completely unrecoverable.
     """
     # Extract fields with fallbacks for every known variant
@@ -24,7 +25,7 @@ def normalize(tile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         or tile.get("user")
         or "unknown"
     )
-    
+
     domain = (
         tile.get("domain")
         or tile.get("room")
@@ -33,7 +34,7 @@ def normalize(tile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         or tile.get("channel")
         or "general"
     )
-    
+
     question = (
         tile.get("question")
         or tile.get("title")
@@ -42,7 +43,7 @@ def normalize(tile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         or tile.get("input")
         or ""
     )
-    
+
     answer = (
         tile.get("answer")
         or tile.get("body")
@@ -52,7 +53,7 @@ def normalize(tile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         or tile.get("text")
         or ""
     )
-    
+
     # If no question or answer, try to construct from raw fields
     if not question and not answer:
         # Maybe it's a plain text tile
@@ -60,54 +61,71 @@ def normalize(tile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             if key in tile and isinstance(tile[key], str):
                 answer = tile[key]
                 break
-    
+
     # Still nothing? Try dumping non-metadata keys (need at least 2 to avoid single metadata fields)
     if not question and not answer:
-        meta_keys = {"id", "_id", "timestamp", "created_at", "updated_at", 
-                     "agent", "creator", "source", "domain", "room", "category",
-                     "type", "format", "version", "meta", "schema"}
-        remaining = {k: v for k, v in tile.items() if k not in meta_keys and isinstance(v, (str, int, float, bool, list, dict))}
+        meta_keys = {
+            "id",
+            "_id",
+            "timestamp",
+            "created_at",
+            "updated_at",
+            "agent",
+            "creator",
+            "source",
+            "domain",
+            "room",
+            "category",
+            "type",
+            "format",
+            "version",
+            "meta",
+            "schema",
+        }
+        remaining = {
+            k: v
+            for k, v in tile.items()
+            if k not in meta_keys and isinstance(v, (str, int, float, bool, list, dict))
+        }
         if remaining and len(remaining) >= 2:
             answer = json.dumps(remaining, ensure_ascii=False)
-    
+
     if not question and not answer:
         return None  # Unrecoverable
-    
+
     timestamp = (
-        tile.get("timestamp")
-        or tile.get("created_at")
-        or tile.get("ts")
-        or tile.get("time")
+        tile.get("timestamp") or tile.get("created_at") or tile.get("ts") or tile.get("time")
     )
-    
+
     # Normalize timestamp to float epoch
     if isinstance(timestamp, str):
         try:
             from datetime import datetime
+
             timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).timestamp()
-        except:
+        except Exception:
             try:
                 timestamp = float(timestamp)
-            except:
+            except Exception:
                 timestamp = None
     elif isinstance(timestamp, int):
         # Could be milliseconds or seconds
         timestamp = timestamp / 1000.0 if timestamp > 1e10 else float(timestamp)
-    
+
     confidence = tile.get("confidence", 0.5)
     if isinstance(confidence, str):
         try:
             confidence = float(confidence)
-        except:
+        except Exception:
             confidence = 0.5
-    
+
     provenance = tile.get("provenance", {})
     if isinstance(provenance, str):
         try:
             provenance = json.loads(provenance)
-        except:
+        except Exception:
             provenance = {}
-    
+
     return {
         "agent": str(agent).strip() or "unknown",
         "domain": str(domain).strip().lower() or "general",
@@ -119,7 +137,7 @@ def normalize(tile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     }
 
 
-def normalize_all(tiles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def normalize_all(tiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Normalize a batch of tiles, skipping unrecoverable ones."""
     results = []
     for tile in tiles:
@@ -129,16 +147,16 @@ def normalize_all(tiles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return results
 
 
-def _tile_signature(tile: Dict[str, Any]) -> str:
+def _tile_signature(tile: dict[str, Any]) -> str:
     """Create a deduplication signature from a tile."""
     q = re.sub(r"\s+", " ", (tile.get("question", "") or "").lower().strip())[:80]
     a = re.sub(r"\s+", " ", (tile.get("answer", "") or "").lower().strip())[:120]
     return f"{q}::{a}"
 
 
-def dedup_exact(tiles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def dedup_exact(tiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Remove exact duplicates by signature."""
-    seen: Set[str] = set()
+    seen: set[str] = set()
     unique = []
     for tile in tiles:
         sig = _tile_signature(tile)
@@ -148,15 +166,15 @@ def dedup_exact(tiles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return unique
 
 
-def dedup_fuzzy(tiles: List[Dict[str, Any]], threshold: float = 0.92) -> List[Dict[str, Any]]:
+def dedup_fuzzy(tiles: list[dict[str, Any]], threshold: float = 0.92) -> list[dict[str, Any]]:
     """Remove near-duplicate tiles using fuzzy string matching.
-    
+
     O(n²) — use only on small batches or sampled data.
     """
     if len(tiles) > 5000:
         # For large datasets, use exact dedup only
         return dedup_exact(tiles)
-    
+
     unique = []
     for tile in tiles:
         sig = _tile_signature(tile)
@@ -175,26 +193,30 @@ def dedup_fuzzy(tiles: List[Dict[str, Any]], threshold: float = 0.92) -> List[Di
     return unique
 
 
-def _score_completeness(tile: Dict[str, Any]) -> int:
+def _score_completeness(tile: dict[str, Any]) -> int:
     """Score how complete a tile is (0-4)."""
     score = 0
-    if tile.get("question"): score += 1
-    if tile.get("answer"): score += 1
-    if tile.get("domain") and tile["domain"] != "general": score += 1
-    if tile.get("agent") and tile["agent"] != "unknown": score += 1
+    if tile.get("question"):
+        score += 1
+    if tile.get("answer"):
+        score += 1
+    if tile.get("domain") and tile["domain"] != "general":
+        score += 1
+    if tile.get("agent") and tile["agent"] != "unknown":
+        score += 1
     return score
 
 
-def score_tile(tile: Dict[str, Any]) -> Dict[str, Any]:
+def score_tile(tile: dict[str, Any]) -> dict[str, Any]:
     """Score a single tile for quality.
-    
+
     Returns tile with added `_quality` field.
     """
-    q = tile.get("question", "")
+    _q = tile.get("question", "")
     a = tile.get("answer", "")
-    
+
     completeness = _score_completeness(tile)
-    
+
     # Length score: ideal answer is 50-500 chars
     a_len = len(a)
     if a_len == 0:
@@ -209,7 +231,7 @@ def score_tile(tile: Dict[str, Any]) -> Dict[str, Any]:
         length_score = 0.8
     else:
         length_score = 0.5
-    
+
     # Specificity: does it contain concrete terms?
     specificity = 0.5
     if any(c.isdigit() for c in a):
@@ -220,45 +242,45 @@ def score_tile(tile: Dict[str, Any]) -> Dict[str, Any]:
         specificity += 0.1
     if "{" in a or "[" in a:
         specificity += 0.1
-    
+
     # Confidence integration
     confidence = tile.get("confidence", 0.5)
-    
+
     # Overall quality (0-1)
     quality = (
-        completeness / 4 * 0.35 +
-        length_score * 0.30 +
-        min(specificity, 1.0) * 0.20 +
-        confidence * 0.15
+        completeness / 4 * 0.35
+        + length_score * 0.30
+        + min(specificity, 1.0) * 0.20
+        + confidence * 0.15
     )
-    
+
     tile["_quality"] = round(quality, 3)
     tile["_completeness"] = completeness
     return tile
 
 
-def score_all(tiles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def score_all(tiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Score all tiles."""
     return [score_tile(tile.copy()) for tile in tiles]
 
 
-def pipeline(raw_tiles: List[Dict[str, Any]], fuzzy: bool = False) -> Dict[str, Any]:
+def pipeline(raw_tiles: list[dict[str, Any]], fuzzy: bool = False) -> dict[str, Any]:
     """Run the full migration pipeline.
-    
+
     Returns dict with stats and processed tiles.
     """
     step1 = normalize_all(raw_tiles)
     step2 = dedup_fuzzy(step1) if fuzzy else dedup_exact(step1)
     step3 = score_all(step2)
-    
+
     # Sort by quality descending
     step3.sort(key=lambda t: t.get("_quality", 0), reverse=True)
-    
+
     # Stats
     domains = Counter(t["domain"] for t in step3)
     agents = Counter(t["agent"] for t in step3)
     quality_dist = Counter(round(t.get("_quality", 0) * 10) / 10 for t in step3)
-    
+
     return {
         "stats": {
             "raw_count": len(raw_tiles),
@@ -269,7 +291,9 @@ def pipeline(raw_tiles: List[Dict[str, Any]], fuzzy: bool = False) -> Dict[str, 
             "top_domains": domains.most_common(10),
             "top_agents": agents.most_common(10),
             "quality_distribution": dict(sorted(quality_dist.items())),
-            "avg_quality": round(sum(t.get("_quality", 0) for t in step3) / len(step3), 3) if step3 else 0,
+            "avg_quality": round(sum(t.get("_quality", 0) for t in step3) / len(step3), 3)
+            if step3
+            else 0,
         },
         "tiles": step3,
     }

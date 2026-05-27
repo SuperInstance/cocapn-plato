@@ -3,9 +3,11 @@
 
 Maximum capability in minimum lines.
 """
+
 import argparse
 import json
 import sys
+
 from cocapn_plato.sdk.client import PlatoClient
 
 
@@ -44,7 +46,9 @@ def main():
     # queue
     qu = sub.add_parser("queue", help="Task queue operations")
     qu_sub = qu.add_subparsers(dest="queue_cmd")
-    qu_sub.add_parser("submit", help="Submit a task").add_argument("--payload", required=True, help="JSON payload")
+    qu_sub.add_parser("submit", help="Submit a task").add_argument(
+        "--payload", required=True, help="JSON payload"
+    )
     qu_sub.add_parser("claim", help="Claim a task").add_argument("--worker", default="cli")
     qu_sub.add_parser("list", help="List tasks").add_argument("--status")
     qu_sub.add_parser("stats", help="Queue stats")
@@ -64,10 +68,20 @@ def main():
             parts = args.sort.split(":")
             sort = [(parts[0], parts[1])]
 
-        result = client.query(where=where if where else None, sort=sort, limit=args.limit, offset=args.offset, q=args.q)
+        result = client.query(
+            where=where if where else None,
+            sort=sort,
+            limit=args.limit,
+            offset=args.offset,
+            q=args.q,
+        )
 
         if args.json:
-            print(json.dumps({"results": result.results, "total": result.total}, indent=2, default=str))
+            print(
+                json.dumps(
+                    {"results": result.results, "total": result.total}, indent=2, default=str
+                )
+            )
             return
 
         print(f"{result.total} tiles (showing {len(result)}):")
@@ -79,11 +93,15 @@ def main():
 
     elif args.cmd == "aggregate":
         metrics = args.metrics.split(",") if args.metrics else None
-        result = client._request("POST", "/aggregate", {
-            "table": "tiles",
-            "group_by": args.group_by,
-            "metrics": metrics,
-        })
+        result = client._request(
+            "POST",
+            "/aggregate",
+            {
+                "table": "tiles",
+                "group_by": args.group_by,
+                "metrics": metrics,
+            },
+        )
 
         if args.json:
             print(json.dumps(result, indent=2, default=str))
@@ -103,12 +121,15 @@ def main():
             print(json.dumps(result, indent=2, default=str))
 
     elif args.cmd == "migrate":
-        from cocapn_plato.engine.migrate import pipeline
         import urllib.request
+
+        from cocapn_plato.engine.migrate import pipeline
 
         if args.input == "plato":
             print(f"Fetching tiles from {args.url}...")
-            req = urllib.request.Request(f"{args.url}/export/plato-tile-spec", headers={"Accept": "application/json"})
+            req = urllib.request.Request(
+                f"{args.url}/export/plato-tile-spec", headers={"Accept": "application/json"}
+            )
             with urllib.request.urlopen(req, timeout=30) as resp:
                 raw = json.loads(resp.read().decode())
             if isinstance(raw, dict):
@@ -124,15 +145,15 @@ def main():
         result = pipeline(raw, fuzzy=args.fuzzy)
         stats = result["stats"]
 
-        print(f"\n📊 Stats:")
+        print("\n📊 Stats:")
         print(f"  Raw:        {stats['raw_count']}")
         print(f"  Normalized: {stats['normalized_count']}")
         print(f"  Unique:     {stats['unique_count']}")
         print(f"  Dups:       {stats['dups_removed']}")
         print(f"  Unrecoverable: {stats['unrecoverable']}")
         print(f"  Avg Quality: {stats['avg_quality']}")
-        print(f"\nTop Domains: {', '.join(f'{d}({c})' for d,c in stats['top_domains'][:5])}")
-        print(f"Top Agents:  {', '.join(f'{a}({c})' for a,c in stats['top_agents'][:5])}")
+        print(f"\nTop Domains: {', '.join(f'{d}({c})' for d, c in stats['top_domains'][:5])}")
+        print(f"Top Agents:  {', '.join(f'{a}({c})' for a, c in stats['top_agents'][:5])}")
 
         if not args.stats_only:
             out = sys.stdout if not args.output else open(args.output, "w")

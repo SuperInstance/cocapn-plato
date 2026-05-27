@@ -1,12 +1,12 @@
 import asyncio
 import time
-from typing import Dict, List, Optional, Any, Callable
-from datetime import datetime
-from .models import Agent, Context, Tile, Stream, Task, FleetStatus
-from .storage import JSONLStore
-from .monitor import DivergenceMonitor
+from collections.abc import Callable
+
 from .evolve import Evolver
 from .grammar import Grammar
+from .models import Agent, Context, Stream, Task, Tile
+from .monitor import DivergenceMonitor
+from .storage import JSONLStore
 
 
 class Fleet:
@@ -20,12 +20,12 @@ class Fleet:
                 "agents": ["name"],
                 "tasks": ["target", "assigned_to"],
                 "interactions": ["agent"],
-            }
+            },
         )
-        self.agents: Dict[str, Agent] = {}
-        self.contexts: Dict[str, Context] = {}
-        self.streams: Dict[str, Stream] = {}
-        self.tasks: Dict[str, Task] = {}
+        self.agents: dict[str, Agent] = {}
+        self.contexts: dict[str, Context] = {}
+        self.streams: dict[str, Stream] = {}
+        self.tasks: dict[str, Task] = {}
         self.grammar = Grammar(self.storage)
         self.monitor = DivergenceMonitor(self.streams)
         self.evolver = Evolver(self.storage, self.contexts, self.streams)
@@ -33,27 +33,50 @@ class Fleet:
         self._task_queue: asyncio.Queue[Task] = asyncio.Queue(maxsize=100)
         self._tile_buffer: asyncio.Queue[Tile] = asyncio.Queue(maxsize=1000)
         self._shutdown = False
-        self._workers: List[asyncio.Task] = []
-        self._event_handlers: List[Callable] = []
+        self._workers: list[asyncio.Task] = []
+        self._event_handlers: list[Callable] = []
         self._boot_contexts()
 
     def _boot_contexts(self):
         defaults = [
-            ("harbor", "Fleet coordination hub", ["register", "status"], ["explore", "connect"], {"north": "forge", "east": "archives"}),
-            ("forge", "Creation and building", ["anvil", "crucible"], ["build", "design"], {"south": "harbor", "west": "tide_pool"}),
-            ("archives", "Knowledge storage", ["scroll", "index"], ["retrieve", "catalog"], {"west": "harbor", "north": "tide_pool"}),
-            ("tide_pool", "Cross-pollination", ["current", "drift"], ["synthesize", "merge"], {"south": "forge", "east": "archives"}),
+            (
+                "harbor",
+                "Fleet coordination hub",
+                ["register", "status"],
+                ["explore", "connect"],
+                {"north": "forge", "east": "archives"},
+            ),
+            (
+                "forge",
+                "Creation and building",
+                ["anvil", "crucible"],
+                ["build", "design"],
+                {"south": "harbor", "west": "tide_pool"},
+            ),
+            (
+                "archives",
+                "Knowledge storage",
+                ["scroll", "index"],
+                ["retrieve", "catalog"],
+                {"west": "harbor", "north": "tide_pool"},
+            ),
+            (
+                "tide_pool",
+                "Cross-pollination",
+                ["current", "drift"],
+                ["synthesize", "merge"],
+                {"south": "forge", "east": "archives"},
+            ),
         ]
         for cid, desc, tools, tasks, exits in defaults:
             if cid not in self.contexts:
-                self.contexts[cid] = Context(id=cid, description=desc, tools=tools, tasks=tasks, exits=exits)
+                self.contexts[cid] = Context(
+                    id=cid, description=desc, tools=tools, tasks=tasks, exits=exits
+                )
 
     async def start(self, n_workers: int = 3):
         """Start background workers for task processing and tile batching."""
-        self._workers = [
-            asyncio.create_task(self._task_worker())
-            for _ in range(n_workers)
-        ]
+        self._workers = [asyncio.create_task(self._task_worker()) for _ in range(n_workers)]
         self._workers.append(asyncio.create_task(self._tile_batch_worker()))
 
     async def stop(self):
@@ -69,7 +92,7 @@ class Fleet:
         """Process tasks from the queue."""
         while not self._shutdown:
             try:
-                task = await asyncio.wait_for(self._task_queue.get(), timeout=1.0)
+                _task = await asyncio.wait_for(self._task_queue.get(), timeout=1.0)
                 # Task processing logic here (or delegate to agent)
                 self._task_queue.task_done()
             except asyncio.TimeoutError:
@@ -79,7 +102,7 @@ class Fleet:
 
     async def _tile_batch_worker(self):
         """Batch flush tiles periodically for performance."""
-        batch: List[Tile] = []
+        batch: list[Tile] = []
         while not self._shutdown:
             try:
                 tile = await asyncio.wait_for(self._tile_buffer.get(), timeout=0.5)
@@ -93,7 +116,7 @@ class Fleet:
                     await self._flush_batch(batch)
                     batch = []
 
-    async def _flush_batch(self, batch: List[Tile]):
+    async def _flush_batch(self, batch: list[Tile]):
         for tile in batch:
             await self.storage.append("tiles", tile.model_dump())
             agent = self.agents.get(tile.agent)
@@ -106,7 +129,10 @@ class Fleet:
         # Notify observers
         for handler in self._event_handlers:
             try:
-                handler("tiles_batch", {"count": len(batch), "domains": list(set(t.domain for t in batch))})
+                handler(
+                    "tiles_batch",
+                    {"count": len(batch), "domains": list(set(t.domain for t in batch))},
+                )
             except Exception:
                 pass
 
@@ -122,17 +148,28 @@ class Fleet:
         await self.storage.append("agents", agent.model_dump())
         return agent
 
-    async def add_context(self, id: str, description: str, tools: List[str] = None, tasks: List[str] = None, exits: Dict[str, str] = None):
-        self.contexts[id] = Context(id=id, description=description, tools=tools or [], tasks=tasks or [], exits=exits or {})
+    async def add_context(
+        self,
+        id: str,
+        description: str,
+        tools: list[str] = None,
+        tasks: list[str] = None,
+        exits: dict[str, str] = None,
+    ):
+        self.contexts[id] = Context(
+            id=id, description=description, tools=tools or [], tasks=tasks or [], exits=exits or {}
+        )
         await self.storage.append("contexts", self.contexts[id].model_dump())
 
     async def add_stream(self, id: str, expected: float = 1.0, auto_respond: bool = False):
         self.streams[id] = Stream(id=id, expected=expected, auto_respond=auto_respond)
 
-    def context(self, id: str) -> Optional[Context]:
+    def context(self, id: str) -> Context | None:
         return self.contexts.get(id)
 
-    async def submit(self, agent_name: str, question: str, answer: str, domain: str = "general") -> Tile:
+    async def submit(
+        self, agent_name: str, question: str, answer: str, domain: str = "general"
+    ) -> Tile:
         tile = Tile(agent=agent_name, question=question, answer=answer, domain=domain)
         # Queue for batch processing instead of immediate write
         try:
@@ -140,18 +177,18 @@ class Fleet:
         except asyncio.QueueFull:
             # Fallback: write directly if buffer is full
             await self.storage.append("tiles", tile.model_dump())
-        
+
         # Update stream
         stream_key = f"plato.tiles.{domain}"
         if stream_key not in self.streams:
             self.streams[stream_key] = Stream(id=stream_key, expected=0.1)
         self.streams[stream_key].observe(1.0)
-        
+
         # Trigger evolution
         await self.evolver.maybe_evolve(domain, buffered_count=self._tile_buffer.qsize())
         return tile
 
-    async def submit_batch(self, tiles: List[Tile]) -> List[Tile]:
+    async def submit_batch(self, tiles: list[Tile]) -> list[Tile]:
         """Bulk tile submission — 10x faster than one-by-one."""
         results = []
         for tile in tiles:
@@ -161,21 +198,22 @@ class Fleet:
             except asyncio.QueueFull:
                 await self.storage.append("tiles", tile.model_dump())
                 results.append(tile)
-            
+
             stream_key = f"plato.tiles.{tile.domain}"
             if stream_key not in self.streams:
                 self.streams[stream_key] = Stream(id=stream_key, expected=0.1)
             self.streams[stream_key].observe(1.0)
-        
+
         # Trigger evolution on most frequent domain
         if tiles:
             from collections import Counter
+
             top_domain = Counter(t.domain for t in tiles).most_common(1)[0][0]
             await self.evolver.maybe_evolve(top_domain, buffered_count=self._tile_buffer.qsize())
-        
+
         return results
 
-    async def interact(self, agent_name: str, action: str, target: str) -> Dict:
+    async def interact(self, agent_name: str, action: str, target: str) -> dict:
         agent = self.agents.get(agent_name)
         if not agent:
             return {"error": "not found"}
@@ -184,7 +222,7 @@ class Fleet:
         await self.storage.append("interactions", result)
         return result
 
-    async def task_assign(self, agent_name: str) -> Optional[Task]:
+    async def task_assign(self, agent_name: str) -> Task | None:
         available = [t for t in self.tasks.values() if not t.completed and not t.assigned_to]
         available.sort(key=lambda t: (-t.priority, t.created_at))
         if available:
@@ -203,7 +241,7 @@ class Fleet:
             return True
         return False
 
-    async def status(self) -> Dict:
+    async def status(self) -> dict:
         # Count both persisted and buffered tiles
         persisted = await self.storage.count("tiles")
         buffered = self._tile_buffer.qsize()
@@ -213,9 +251,13 @@ class Fleet:
             "tiles": persisted + buffered,
             "tiles_persisted": persisted,
             "tiles_buffered": buffered,
-            "streams": {k: {"ema": s.ema, "divergence": s.divergence} for k, s in self.streams.items()},
+            "streams": {
+                k: {"ema": s.ema, "divergence": s.divergence} for k, s in self.streams.items()
+            },
             "divergences": self.monitor.check_all(),
-            "tasks_available": len([t for t in self.tasks.values() if not t.completed and not t.assigned_to]),
+            "tasks_available": len(
+                [t for t in self.tasks.values() if not t.completed and not t.assigned_to]
+            ),
             "tasks_completed": len([t for t in self.tasks.values() if t.completed]),
             "uptime_seconds": time.time() - self._started_at,
             "queue_depth": buffered,
@@ -224,6 +266,11 @@ class Fleet:
     async def auto_respond(self, stream_id: str):
         stream = self.streams.get(stream_id)
         if stream and stream.auto_respond:
-            tile = await self.submit("fleet_auto", f"Divergence in {stream_id}", f"EMA={stream.ema:.2f}, expected={stream.expected:.2f}", domain="fleet_orchestration")
+            tile = await self.submit(
+                "fleet_auto",
+                f"Divergence in {stream_id}",
+                f"EMA={stream.ema:.2f}, expected={stream.expected:.2f}",
+                domain="fleet_orchestration",
+            )
             return tile
         return None

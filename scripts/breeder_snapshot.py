@@ -20,7 +20,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # ── Paths ────────────────────────────────────────────────────────
 PLATO_DIR = Path(__file__).resolve().parent.parent
@@ -29,7 +29,6 @@ sys.path.insert(0, str(PLATO_DIR))
 # ── Optional sunset imports ────────────────────────────────────
 try:
     sys.path.insert(0, str(PLATO_DIR.parent / "sunset-ecosystem"))
-    from swarm.breeder import BreederDaemonV2
     _HAS_BREEDER = True
 except Exception:
     _HAS_BREEDER = False
@@ -38,7 +37,7 @@ except Exception:
 PLATO_URL = "http://147.224.38.131:8847"
 
 
-def plato_submit_tile(tile: Dict[str, Any]) -> bool:
+def plato_submit_tile(tile: dict[str, Any]) -> bool:
     """Submit a tile to the PLATO store."""
     try:
         data = json.dumps(tile).encode()
@@ -56,7 +55,7 @@ def plato_submit_tile(tile: Dict[str, Any]) -> bool:
 
 
 # ── Snapshot builders ──────────────────────────────────────────
-def build_diversity_tile(diversity: float, threshold: float = 0.35) -> Dict[str, Any]:
+def build_diversity_tile(diversity: float, threshold: float = 0.35) -> dict[str, Any]:
     """Build a PLATO tile for diversity status."""
     level = "healthy"
     if diversity < 0.20:
@@ -74,7 +73,7 @@ def build_diversity_tile(diversity: float, threshold: float = 0.35) -> Dict[str,
     }
 
 
-def build_thermal_tile(pressure: float) -> Dict[str, Any]:
+def build_thermal_tile(pressure: float) -> dict[str, Any]:
     """Build a PLATO tile for thermal pressure."""
     level = "normal"
     if pressure >= 0.9:
@@ -91,7 +90,7 @@ def build_thermal_tile(pressure: float) -> Dict[str, Any]:
     }
 
 
-def build_lifecycle_tile(state: str, active: int) -> Dict[str, Any]:
+def build_lifecycle_tile(state: str, active: int) -> dict[str, Any]:
     """Build a PLATO tile for lifecycle state."""
     return {
         "tile_type": "breeder_lifecycle",
@@ -102,7 +101,7 @@ def build_lifecycle_tile(state: str, active: int) -> Dict[str, Any]:
     }
 
 
-def build_alert_tile(alert: Dict[str, Any]) -> Dict[str, Any]:
+def build_alert_tile(alert: dict[str, Any]) -> dict[str, Any]:
     """Build a PLATO tile from a diversity or thermal alert."""
     return {
         "tile_type": "breeder_alert",
@@ -120,8 +119,8 @@ def build_full_snapshot(
     thermal: float = 0.3,
     state: str = "COMPETE",
     active: int = 12,
-    alerts: List[Dict[str, Any]] | None = None,
-) -> Dict[str, Any]:
+    alerts: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Build a complete breeder snapshot with all tiles."""
     tiles = [
         build_diversity_tile(diversity),
@@ -129,7 +128,7 @@ def build_full_snapshot(
         build_lifecycle_tile(state, active),
     ]
 
-    for alert in (alerts or []):
+    for alert in alerts or []:
         tiles.append(build_alert_tile(alert))
 
     return {

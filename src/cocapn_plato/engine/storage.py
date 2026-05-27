@@ -1,22 +1,22 @@
 """Enhanced JSONLStore with QueryEngine integration."""
-import json
-import os
+
 import asyncio
-from typing import List, Dict, Any, Optional
+import json
 from pathlib import Path
-from datetime import datetime
+from typing import Any
+
 from .query import QueryEngine
 
 
 class JSONLStore:
     """Async-aware append-only JSONL storage with in-memory indexing + rich querying."""
 
-    def __init__(self, dir: str, index_fields: Dict[str, List[str]] = None):
+    def __init__(self, dir: str, index_fields: dict[str, list[str]] = None):
         self.dir = Path(dir)
         self.dir.mkdir(parents=True, exist_ok=True)
         self._index_fields = index_fields or {}
-        self._indexes: Dict[str, Dict[str, List[int]]] = {}
-        self._line_offsets: Dict[str, List[int]] = {}
+        self._indexes: dict[str, dict[str, list[int]]] = {}
+        self._line_offsets: dict[str, list[int]] = {}
         self._lock = asyncio.Lock()
         self._load_existing()
         self.query_engine = QueryEngine(dir, self._index_fields)
@@ -33,7 +33,7 @@ class JSONLStore:
             if not path.exists():
                 continue
             offset = 0
-            with open(path, 'rb') as f:
+            with open(path, "rb") as f:
                 for line in f:
                     self._line_offsets[table].append(offset)
                     offset += len(line)
@@ -42,55 +42,57 @@ class JSONLStore:
                     try:
                         rec = json.loads(line)
                         for field in self._index_fields[table]:
-                            val = str(rec.get(field, ''))
+                            val = str(rec.get(field, ""))
                             if val not in self._indexes[table][field]:
                                 self._indexes[table][field][val] = []
-                            self._indexes[table][field][val].append(len(self._line_offsets[table]) - 1)
+                            self._indexes[table][field][val].append(
+                                len(self._line_offsets[table]) - 1
+                            )
                     except json.JSONDecodeError:
                         pass
 
-    async def append(self, table: str, record: Dict[str, Any]):
+    async def append(self, table: str, record: dict[str, Any]):
         async with self._lock:
             line = json.dumps(record, default=str) + "\n"
             path = self._path(table)
-            
+
             if table not in self._line_offsets:
                 self._line_offsets[table] = []
                 if table in self._index_fields:
                     self._indexes[table] = {f: {} for f in self._index_fields[table]}
-            
+
             offset = path.stat().st_size if path.exists() else 0
             line_idx = len(self._line_offsets[table])
             self._line_offsets[table].append(offset)
-            
+
             if table in self._index_fields:
                 for field in self._index_fields[table]:
-                    val = str(record.get(field, ''))
+                    val = str(record.get(field, ""))
                     if val not in self._indexes[table][field]:
                         self._indexes[table][field][val] = []
                     self._indexes[table][field][val].append(line_idx)
-            
+
             with open(path, "a") as f:
                 f.write(line)
 
-    async def query(self, table: str, **filters) -> List[Dict[str, Any]]:
+    async def query(self, table: str, **filters) -> list[dict[str, Any]]:
         """Legacy equality-only query."""
         path = self._path(table)
         if not path.exists():
             return []
-        
+
         if table in self._indexes and filters:
             indexed_field = None
             for field in filters:
                 if field in self._indexes[table]:
                     indexed_field = field
                     break
-            
+
             if indexed_field:
                 val = str(filters[indexed_field])
                 line_indices = self._indexes[table][indexed_field].get(val, [])
                 results = []
-                with open(path, 'rb') as f:
+                with open(path, "rb") as f:
                     for idx in line_indices:
                         if idx < len(self._line_offsets[table]):
                             f.seek(self._line_offsets[table][idx])
@@ -99,7 +101,7 @@ class JSONLStore:
                             if all(rec.get(k) == v for k, v in filters.items()):
                                 results.append(rec)
                 return results
-        
+
         results = []
         with open(path) as f:
             for line in f:
@@ -113,13 +115,13 @@ class JSONLStore:
     async def query_rich(
         self,
         table: str,
-        where: Optional[Dict[str, Any]] = None,
-        sort: Optional[List[tuple]] = None,
+        where: dict[str, Any] | None = None,
+        sort: list[tuple] | None = None,
         limit: int = 50,
         offset: int = 0,
-        q: Optional[str] = None,
-        q_fields: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        q: str | None = None,
+        q_fields: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Rich query with filtering, sorting, pagination, full-text search."""
         return self.query_engine.query(table, where, sort, limit, offset, q, q_fields)
 
@@ -127,13 +129,13 @@ class JSONLStore:
         self,
         table: str,
         group_by: str,
-        metrics: Optional[List[str]] = None,
-        where: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+        metrics: list[str] | None = None,
+        where: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         """Aggregate query: GROUP BY with COUNT/SUM/AVG."""
         return self.query_engine.aggregate(table, group_by, metrics, where)
 
-    async def all(self, table: str) -> List[Dict[str, Any]]:
+    async def all(self, table: str) -> list[dict[str, Any]]:
         path = self._path(table)
         if not path.exists():
             return []
@@ -143,5 +145,5 @@ class JSONLStore:
     async def count(self, table: str) -> int:
         return len(self._line_offsets.get(table, []))
 
-    def tables(self) -> List[str]:
+    def tables(self) -> list[str]:
         return [p.stem for p in self.dir.glob("*.jsonl")]

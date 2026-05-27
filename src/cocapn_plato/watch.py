@@ -5,21 +5,22 @@ Usage:
     cocapn-watch --interval 30 --webhook https://hooks.example.com/alerts
     cocapn-watch --config watch.json
 """
+
 import argparse
 import json
 import time
 import urllib.request
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 
 @dataclass
 class WatchConfig:
-    services: List[Dict[str, Any]]
+    services: list[dict[str, Any]]
     interval: int = 30
-    webhook: Optional[str] = None
-    log_file: Optional[str] = None
+    webhook: str | None = None
+    log_file: str | None = None
     alert_on_down: bool = True
     alert_on_recover: bool = True
     consecutive_failures: int = 1  # Alert after N consecutive failures
@@ -30,25 +31,25 @@ class Watchdog:
 
     def __init__(self, config: WatchConfig):
         self.config = config
-        self.state: Dict[str, Dict[str, Any]] = {}  # service name -> {ok, failures, last_alerted}
+        self.state: dict[str, dict[str, Any]] = {}  # service name -> {ok, failures, last_alerted}
 
-    def check(self) -> List[Dict[str, Any]]:
+    def check(self) -> list[dict[str, Any]]:
         """Check all services, return alerts triggered."""
         alerts = []
         for svc in self.config.services:
             name = svc["name"]
             url = f"http://{svc['host']}:{svc['port']}{svc.get('path', '/')}"
             timeout = svc.get("timeout", 5)
-            
+
             ok = self._probe(url, timeout)
-            
+
             prev = self.state.get(name, {"ok": True, "failures": 0, "alerted": False})
-            
+
             if not ok:
                 failures = prev["failures"] + 1
                 alerted = prev.get("alerted", False)
                 self.state[name] = {"ok": False, "failures": failures, "alerted": alerted}
-                
+
                 if failures >= self.config.consecutive_failures and not alerted:
                     alert = {
                         "time": datetime.now().isoformat(),
@@ -69,7 +70,7 @@ class Watchdog:
                     }
                     alerts.append(alert)
                 self.state[name] = {"ok": True, "failures": 0, "alerted": False}
-        
+
         return alerts
 
     def _probe(self, url: str, timeout: float) -> bool:
@@ -82,14 +83,16 @@ class Watchdog:
         except Exception:
             return False
 
-    def send_alerts(self, alerts: List[Dict[str, Any]]):
+    def send_alerts(self, alerts: list[dict[str, Any]]):
         for alert in alerts:
-            msg = f"[{alert['time']}] {alert['service']} is {alert['event']} ({alert.get('url', '')})"
-            
+            msg = (
+                f"[{alert['time']}] {alert['service']} is {alert['event']} ({alert.get('url', '')})"
+            )
+
             if self.config.log_file:
                 with open(self.config.log_file, "a") as f:
                     f.write(msg + "\n")
-            
+
             if self.config.webhook:
                 try:
                     body = json.dumps(alert).encode()
@@ -102,7 +105,7 @@ class Watchdog:
                     urllib.request.urlopen(req, timeout=10)
                 except Exception as e:
                     print(f"Webhook failed: {e}")
-            
+
             print(msg)
 
     def run(self):
@@ -110,7 +113,7 @@ class Watchdog:
         print(f"Alerts: down={self.config.alert_on_down}, recover={self.config.alert_on_recover}")
         if self.config.webhook:
             print(f"Webhook: {self.config.webhook}")
-        
+
         while True:
             alerts = self.check()
             if alerts:

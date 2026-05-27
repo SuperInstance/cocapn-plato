@@ -1,7 +1,9 @@
 """Tests for QueryEngine — maximum capability in minimum lines."""
+
 import json
 import tempfile
 from pathlib import Path
+
 import pytest
 
 from cocapn_plato.engine.query import QueryEngine
@@ -17,11 +19,41 @@ def engine():
 def sample_tiles(engine):
     """Seed test data."""
     tiles = [
-        {"agent": "ccc", "domain": "harbor", "question": "What is the harbor?", "answer": "A coordination hub.", "timestamp": 1000},
-        {"agent": "ccc", "domain": "forge", "question": "How to build?", "answer": "Use the anvil.", "timestamp": 2000},
-        {"agent": "oracle1", "domain": "harbor", "question": "Fleet status?", "answer": "All green.", "timestamp": 1500},
-        {"agent": "fm", "domain": "forge", "question": "CSS help?", "answer": "Flexbox.", "timestamp": 3000},
-        {"agent": "ccc", "domain": "archives", "question": "Old logs", "answer": "From day one.", "timestamp": 500},
+        {
+            "agent": "ccc",
+            "domain": "harbor",
+            "question": "What is the harbor?",
+            "answer": "A coordination hub.",
+            "timestamp": 1000,
+        },
+        {
+            "agent": "ccc",
+            "domain": "forge",
+            "question": "How to build?",
+            "answer": "Use the anvil.",
+            "timestamp": 2000,
+        },
+        {
+            "agent": "oracle1",
+            "domain": "harbor",
+            "question": "Fleet status?",
+            "answer": "All green.",
+            "timestamp": 1500,
+        },
+        {
+            "agent": "fm",
+            "domain": "forge",
+            "question": "CSS help?",
+            "answer": "Flexbox.",
+            "timestamp": 3000,
+        },
+        {
+            "agent": "ccc",
+            "domain": "archives",
+            "question": "Old logs",
+            "answer": "From day one.",
+            "timestamp": 500,
+        },
     ]
     path = Path(engine.dir) / "tiles.jsonl"
     with open(path, "w") as f:
@@ -82,7 +114,9 @@ def test_aggregate(sample_tiles):
 
 
 def test_aggregate_with_metrics(sample_tiles):
-    r = sample_tiles.aggregate("tiles", group_by="domain", metrics=["avg:timestamp", "sum:timestamp"])
+    r = sample_tiles.aggregate(
+        "tiles", group_by="domain", metrics=["avg:timestamp", "sum:timestamp"]
+    )
     harbor = [row for row in r if row["_key"] == "harbor"][0]
     assert harbor["count"] == 2
     assert harbor["avg:timestamp"] == 1250.0

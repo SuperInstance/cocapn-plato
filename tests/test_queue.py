@@ -1,8 +1,9 @@
 """Tests for the task queue."""
-import pytest
-import tempfile
+
 import os
-from cocapn_plato.engine.queue import TaskQueue, Task
+import tempfile
+
+from cocapn_plato.engine.queue import TaskQueue
 
 
 def test_submit_and_claim():
@@ -10,7 +11,9 @@ def test_submit_and_claim():
         path = f.name
     try:
         q = TaskQueue(path)
-        t = q.submit({"action": "scrape", "url": "https://example.com"}, priority=5, tags=["scraper"])
+        t = q.submit(
+            {"action": "scrape", "url": "https://example.com"}, priority=5, tags=["scraper"]
+        )
         assert t.status == "pending"
         assert t.priority == 5
         assert t.tags == ["scraper"]
@@ -35,13 +38,13 @@ def test_complete_and_fail():
         q = TaskQueue(path)
         t = q.submit({"action": "process"})
         q.claim(worker="bot-1")
-        
+
         q.complete(t.id, {"result": "ok"})
         updated = q.tasks[t.id]
         assert updated.status == "done"
         assert updated.result["result"] == "ok"
         assert updated.completed_at is not None
-        
+
         # New task, fail once
         t2 = q.submit({"action": "risky"}, max_attempts=2)
         q.claim(worker="bot-1")
@@ -49,7 +52,7 @@ def test_complete_and_fail():
         updated2 = q.tasks[t2.id]
         assert updated2.status == "pending"  # Retry
         assert updated2.attempts == 1
-        
+
         # Fail again
         q.claim(worker="bot-1")
         q.fail(t2.id, "timeout again")
@@ -68,13 +71,13 @@ def test_priority_ordering():
         low = q.submit({"priority": "low"}, priority=1)
         high = q.submit({"priority": "high"}, priority=10)
         mid = q.submit({"priority": "mid"}, priority=5)
-        
+
         claimed = q.claim()
         assert claimed.id == high.id
-        
+
         claimed2 = q.claim()
         assert claimed2.id == mid.id
-        
+
         claimed3 = q.claim()
         assert claimed3.id == low.id
     finally:
@@ -88,7 +91,7 @@ def test_persistence():
         q1 = TaskQueue(path)
         t = q1.submit({"action": "persist"})
         q1.claim(worker="bot-1")
-        
+
         # New instance reads same file
         q2 = TaskQueue(path)
         assert t.id in q2.tasks
@@ -107,7 +110,7 @@ def test_stats():
         q.submit({"a": 2})
         q.claim(worker="bot-1")
         q.submit({"a": 3})
-        
+
         stats = q.stats()
         assert stats["total"] == 3
         assert stats["counts"]["pending"] == 2
@@ -124,13 +127,13 @@ def test_list_filter():
         q = TaskQueue(path)
         t1 = q.submit({"a": 1})
         t2 = q.submit({"a": 2})
-        claimed = q.claim(worker="bot-1")  # FIFO: claims t1 (oldest)
-        
+        _claimed = q.claim(worker="bot-1")  # FIFO: claims t1 (oldest)
+
         pending = q.list(status="pending")
         assert len(pending) == 1
         assert pending[0].status == "pending"
         assert pending[0].id == t2.id
-        
+
         running = q.list(status="running")
         assert len(running) == 1
         assert running[0].id == t1.id

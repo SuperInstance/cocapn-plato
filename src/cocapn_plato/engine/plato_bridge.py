@@ -2,11 +2,12 @@
 
 End-to-end: Fleet() class → PLATO submit → query back.
 """
-import json
+
 import asyncio
-from typing import Dict, List, Any, Optional
-from urllib.parse import urlencode
+import json
 import urllib.request
+from typing import Any
+from urllib.parse import urlencode
 
 
 class PlatoBridge:
@@ -16,7 +17,7 @@ class PlatoBridge:
         self.plato_url = plato_url.rstrip("/")
         self.timeout = timeout
 
-    def _request(self, method: str, path: str, data: Optional[Dict] = None) -> Dict[str, Any]:
+    def _request(self, method: str, path: str, data: dict | None = None) -> dict[str, Any]:
         """Synchronous HTTP request (for use in async contexts via run_in_executor)."""
         url = f"{self.plato_url}{path}"
         headers = {"Content-Type": "application/json"}
@@ -33,12 +34,12 @@ class PlatoBridge:
         except Exception as e:
             return {"status": "error", "reason": str(e)}
 
-    async def submit_tile(self, tile: Dict[str, Any]) -> Dict[str, Any]:
+    async def submit_tile(self, tile: dict[str, Any]) -> dict[str, Any]:
         """Submit a single tile to PLATO."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._request, "POST", "/submit", tile)
 
-    async def submit_batch(self, tiles: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def submit_batch(self, tiles: list[dict[str, Any]]) -> dict[str, Any]:
         """Submit multiple tiles to PLATO."""
         # PLATO batch endpoint may not exist; fallback to sequential
         loop = asyncio.get_event_loop()
@@ -46,25 +47,33 @@ class PlatoBridge:
         for tile in tiles:
             r = await loop.run_in_executor(None, self._request, "POST", "/submit", tile)
             results.append(r)
-        return {"status": "ok", "results": results, "accepted": sum(1 for r in results if r.get("status") == "accepted")}
+        return {
+            "status": "ok",
+            "results": results,
+            "accepted": sum(1 for r in results if r.get("status") == "accepted"),
+        }
 
     async def query_remote(
         self,
-        domain: Optional[str] = None,
-        agent: Optional[str] = None,
-        q: Optional[str] = None,
+        domain: str | None = None,
+        agent: str | None = None,
+        q: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Query remote PLATO for tiles. Falls back to /export if no query endpoint exists."""
         # Try modern query endpoint first
-        params = {k: v for k, v in {
-            "domain": domain,
-            "agent": agent,
-            "q": q,
-            "limit": limit,
-            "offset": offset,
-        }.items() if v is not None}
+        params = {
+            k: v
+            for k, v in {
+                "domain": domain,
+                "agent": agent,
+                "q": q,
+                "limit": limit,
+                "offset": offset,
+            }.items()
+            if v is not None
+        }
 
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
@@ -84,16 +93,21 @@ class PlatoBridge:
             tiles = [t for t in tiles if t.get("agent") == agent]
         if q:
             q_lower = q.lower()
-            tiles = [t for t in tiles if q_lower in t.get("question", "").lower() or q_lower in t.get("answer", "").lower()]
+            tiles = [
+                t
+                for t in tiles
+                if q_lower in t.get("question", "").lower()
+                or q_lower in t.get("answer", "").lower()
+            ]
 
-        return tiles[offset:offset + limit]
+        return tiles[offset : offset + limit]
 
-    async def health(self) -> Dict[str, Any]:
+    async def health(self) -> dict[str, Any]:
         """Check remote PLATO health."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._request, "GET", "/health")
 
-    async def status(self) -> Dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
         """Get remote PLATO status."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._request, "GET", "/status")

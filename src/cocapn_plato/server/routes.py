@@ -1,20 +1,21 @@
 """Server routes — FastAPI app with query, aggregate, and bridge endpoints."""
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Query as QueryParam
-from fastapi.middleware.gzip import GZipMiddleware
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any, Tuple
-import asyncio
+
 import json
 import time
+from typing import Any
+
+from fastapi import FastAPI, HTTPException
+from fastapi import Query as QueryParam
+from fastapi.middleware.gzip import GZipMiddleware
+from pydantic import BaseModel, Field
 
 # Import from monorepo
 from ..engine.engine import Fleet
 from ..engine.plato_bridge import PlatoBridge
 
-
 # Singletons
-_fleet: Optional[Fleet] = None
-_bridge: Optional[PlatoBridge] = None
+_fleet: Fleet | None = None
+_bridge: PlatoBridge | None = None
 
 
 def get_fleet() -> Fleet:
@@ -24,7 +25,7 @@ def get_fleet() -> Fleet:
     return _fleet
 
 
-def get_bridge(url: Optional[str] = None) -> Optional[PlatoBridge]:
+def get_bridge(url: str | None = None) -> PlatoBridge | None:
     global _bridge
     if url and _bridge is None:
         _bridge = PlatoBridge(url)
@@ -33,21 +34,22 @@ def get_bridge(url: Optional[str] = None) -> Optional[PlatoBridge]:
 
 # --- Request Models ---
 
+
 class QueryBody(BaseModel):
     table: str = "tiles"
-    where: Optional[Dict[str, Any]] = None
-    sort: Optional[List[Tuple[str, str]]] = None
+    where: dict[str, Any] | None = None
+    sort: list[tuple[str, str]] | None = None
     limit: int = Field(default=50, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
-    q: Optional[str] = None
-    q_fields: Optional[List[str]] = None
+    q: str | None = None
+    q_fields: list[str] | None = None
 
 
 class AggregateBody(BaseModel):
     table: str = "tiles"
     group_by: str
-    metrics: Optional[List[str]] = None
-    where: Optional[Dict[str, Any]] = None
+    metrics: list[str] | None = None
+    where: dict[str, Any] | None = None
 
 
 class BridgeSubmitBody(BaseModel):
@@ -56,20 +58,21 @@ class BridgeSubmitBody(BaseModel):
     answer: str
     domain: str = "general"
     sync_to_plato: bool = False
-    plato_url: Optional[str] = None
+    plato_url: str | None = None
 
 
 class BridgeQueryBody(BaseModel):
-    domain: Optional[str] = None
-    agent: Optional[str] = None
-    q: Optional[str] = None
+    domain: str | None = None
+    agent: str | None = None
+    q: str | None = None
     limit: int = 50
     offset: int = 0
 
 
 # --- Route Factory ---
 
-def create_app(fleet_instance: Optional[Fleet] = None) -> FastAPI:
+
+def create_app(fleet_instance: Fleet | None = None) -> FastAPI:
     """Factory for creating the FastAPI app with all routes."""
     global _fleet
     if fleet_instance:
@@ -108,10 +111,10 @@ def create_app(fleet_instance: Optional[Fleet] = None) -> FastAPI:
     @app.get("/query")
     async def query_get(
         table: str = "tiles",
-        domain: Optional[str] = None,
-        agent: Optional[str] = None,
-        q: Optional[str] = None,
-        sort: Optional[str] = QueryParam(None, description="field:direction, e.g. timestamp:desc"),
+        domain: str | None = None,
+        agent: str | None = None,
+        q: str | None = None,
+        sort: str | None = QueryParam(None, description="field:direction, e.g. timestamp:desc"),
         limit: int = QueryParam(50, ge=1, le=500),
         offset: int = QueryParam(0, ge=0),
     ):
@@ -155,7 +158,7 @@ def create_app(fleet_instance: Optional[Fleet] = None) -> FastAPI:
     async def aggregate_get(
         table: str = "tiles",
         group_by: str = "domain",
-        metric: Optional[str] = None,
+        metric: str | None = None,
     ):
         """GET convenience for aggregation."""
         fleet = get_fleet()
@@ -180,12 +183,14 @@ def create_app(fleet_instance: Optional[Fleet] = None) -> FastAPI:
         if body.sync_to_plato:
             bridge = get_bridge(body.plato_url)
             if bridge:
-                remote = await bridge.submit_tile({
-                    "agent": body.agent,
-                    "question": body.question,
-                    "answer": body.answer,
-                    "domain": body.domain,
-                })
+                remote = await bridge.submit_tile(
+                    {
+                        "agent": body.agent,
+                        "question": body.question,
+                        "answer": body.answer,
+                        "domain": body.domain,
+                    }
+                )
                 result["remote"] = remote
             else:
                 result["remote"] = {"status": "error", "reason": "no bridge configured"}
@@ -235,7 +240,7 @@ def create_app(fleet_instance: Optional[Fleet] = None) -> FastAPI:
                 seen.add(key)
 
         return {
-            "results": merged[:body.limit],
+            "results": merged[: body.limit],
             "local_count": len(local["results"]),
             "remote_count": len(remote.get("results", [])),
             "merged_count": len(merged),
@@ -263,7 +268,7 @@ def create_app(fleet_instance: Optional[Fleet] = None) -> FastAPI:
     # --- Task Queue ---
     from ..engine.queue import TaskQueue
 
-    _queue: Optional[TaskQueue] = None
+    _queue: TaskQueue | None = None
 
     def get_queue() -> TaskQueue:
         global _queue
@@ -272,23 +277,25 @@ def create_app(fleet_instance: Optional[Fleet] = None) -> FastAPI:
         return _queue
 
     class TaskSubmit(BaseModel):
-        payload: Dict[str, Any]
+        payload: dict[str, Any]
         priority: int = 0
-        tags: List[str] = []
+        tags: list[str] = []
         max_attempts: int = 3
 
     class TaskComplete(BaseModel):
-        result: Optional[Dict[str, Any]] = None
-        error: Optional[str] = None
+        result: dict[str, Any] | None = None
+        error: str | None = None
 
     @app.post("/queue/submit")
     async def queue_submit(body: TaskSubmit):
         queue = get_queue()
-        task = queue.submit(body.payload, priority=body.priority, tags=body.tags, max_attempts=body.max_attempts)
+        task = queue.submit(
+            body.payload, priority=body.priority, tags=body.tags, max_attempts=body.max_attempts
+        )
         return {"task": task.to_dict()}
 
     @app.post("/queue/claim")
-    async def queue_claim(worker: str = "anonymous", tags: Optional[str] = None):
+    async def queue_claim(worker: str = "anonymous", tags: str | None = None):
         queue = get_queue()
         tag_list = tags.split(",") if tags else None
         task = queue.claim(worker=worker, tags=tag_list)
@@ -313,7 +320,7 @@ def create_app(fleet_instance: Optional[Fleet] = None) -> FastAPI:
         return {"task": task.to_dict()}
 
     @app.get("/queue/list")
-    async def queue_list(status: Optional[str] = None, limit: int = 50):
+    async def queue_list(status: str | None = None, limit: int = 50):
         queue = get_queue()
         tasks = queue.list(status=status, limit=limit)
         return {"tasks": [t.to_dict() for t in tasks], "count": len(tasks)}

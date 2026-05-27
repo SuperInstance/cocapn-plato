@@ -1,8 +1,8 @@
-import time
 import asyncio
-from typing import Dict, List
-from .storage import JSONLStore
+import time
+
 from .models import Context, Stream
+from .storage import JSONLStore
 
 
 class Evolver:
@@ -11,7 +11,9 @@ class Evolver:
     THRESHOLD = 10
     ADVANCED_THRESHOLD = 20
 
-    def __init__(self, storage: JSONLStore, contexts: Dict[str, Context], streams: Dict[str, Stream]):
+    def __init__(
+        self, storage: JSONLStore, contexts: dict[str, Context], streams: dict[str, Stream]
+    ):
         self.storage = storage
         self.contexts = contexts
         self.streams = streams
@@ -22,10 +24,10 @@ class Evolver:
         async with self._lock:
             tiles = await self.storage.query("tiles", domain=domain)
             count = len(tiles) + buffered_count
-            
+
             if count < self.THRESHOLD:
                 return
-            
+
             # Phase 1: Generate tasks (only once per threshold)
             if f"{domain}_tasks" not in self._evolved:
                 self._evolved.add(f"{domain}_tasks")
@@ -35,20 +37,23 @@ class Evolver:
                     words = q.split()[:3]
                     if words:
                         topics.add(" ".join(words).lower())
-                
+
                 for i, topic in enumerate(topics):
                     if i >= 3:
                         break
                     task_id = f"{domain}_auto_{topic.replace(' ', '_')}_{int(time.time())}"
-                    await self.storage.append("tasks", {
-                        "id": task_id,
-                        "target": domain,
-                        "description": f"Deep-dive: {topic} in {domain}",
-                        "created_at": time.time(),
-                        "auto": True,
-                        "priority": 1,
-                        "completed": False,
-                    })
+                    await self.storage.append(
+                        "tasks",
+                        {
+                            "id": task_id,
+                            "target": domain,
+                            "description": f"Deep-dive: {topic} in {domain}",
+                            "created_at": time.time(),
+                            "auto": True,
+                            "priority": 1,
+                            "completed": False,
+                        },
+                    )
 
             # Phase 2: Advanced context (at 2x threshold)
             if count >= self.ADVANCED_THRESHOLD and f"{domain}_advanced" not in self._evolved:
@@ -62,9 +67,12 @@ class Evolver:
                         tasks=[f"master_{domain}", f"teach_{domain}"],
                         exits={"back": domain},
                     )
-                    await self.storage.append("contexts", {
-                        "id": new_id,
-                        "parent": domain,
-                        "created_at": time.time(),
-                        "auto": True,
-                    })
+                    await self.storage.append(
+                        "contexts",
+                        {
+                            "id": new_id,
+                            "parent": domain,
+                            "created_at": time.time(),
+                            "auto": True,
+                        },
+                    )

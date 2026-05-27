@@ -11,3 +11,4 @@ build/
 venv/
 fleet_data/
 *.jsonl
+.coverage

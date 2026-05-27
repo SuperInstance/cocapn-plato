@@ -13,23 +13,24 @@ services.json:
   {"name": "dashboard", "cmd": "python -m dashboard.server", "port": 4046}
 ]
 """
+
 import json
-import sys
-import time
 import subprocess
-import urllib.request
+import sys
 import threading
-from typing import Dict, List, Any
+import time
+import urllib.request
 from datetime import datetime
+from typing import Any
 
 
 class Supervisor:
-    def __init__(self, services: List[Dict[str, Any]], check_interval: int = 10):
+    def __init__(self, services: list[dict[str, Any]], check_interval: int = 10):
         self.services = services
         self.check_interval = check_interval
-        self.processes: Dict[str, subprocess.Popen] = {}
-        self.restarts: Dict[str, int] = {}
-        self.last_check: Dict[str, str] = {}
+        self.processes: dict[str, subprocess.Popen] = {}
+        self.restarts: dict[str, int] = {}
+        self.last_check: dict[str, str] = {}
         self._lock = threading.Lock()
         self._running = True
 
@@ -37,7 +38,7 @@ class Supervisor:
         for svc in self.services:
             self._start(svc)
 
-    def _start(self, svc: Dict[str, Any]):
+    def _start(self, svc: dict[str, Any]):
         name = svc["name"]
         print(f"[{datetime.now().isoformat()}] Starting {name}...")
         proc = subprocess.Popen(
@@ -83,7 +84,9 @@ class Supervisor:
             self.last_check[name] = datetime.now().isoformat()
 
             if not alive or not responding:
-                print(f"[{datetime.now().isoformat()}] {name} down (alive={alive}, responding={responding})")
+                print(
+                    f"[{datetime.now().isoformat()}] {name} down (alive={alive}, responding={responding})"
+                )
                 # Kill if still running
                 if alive:
                     with self._lock:
@@ -99,7 +102,9 @@ class Supervisor:
                     self.restarts[name] = self.restarts.get(name, 0) + 1
                 self._start(svc)
             else:
-                print(f"[{datetime.now().isoformat()}] {name} OK (restarts: {self.restarts.get(name, 0)})")
+                print(
+                    f"[{datetime.now().isoformat()}] {name} OK (restarts: {self.restarts.get(name, 0)})"
+                )
 
     def run(self):
         self.start_all()
@@ -124,7 +129,7 @@ class Supervisor:
                     proc.kill()
                     proc.wait()
 
-    def status(self) -> Dict[str, Any]:
+    def status(self) -> dict[str, Any]:
         with self._lock:
             return {
                 "services": [
@@ -160,7 +165,9 @@ def run_dashboard(supervisor: Supervisor, port: int = 9999):
                 self.end_headers()
                 status = supervisor.status()
                 all_alive = all(s["alive"] for s in status["services"])
-                self.wfile.write(json.dumps({"status": "healthy" if all_alive else "degraded"}).encode())
+                self.wfile.write(
+                    json.dumps({"status": "healthy" if all_alive else "degraded"}).encode()
+                )
             else:
                 self.send_response(404)
                 self.end_headers()
@@ -174,7 +181,9 @@ def run_dashboard(supervisor: Supervisor, port: int = 9999):
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="cocapn-supervise", description="Minimal service supervisor")
+    parser = argparse.ArgumentParser(
+        prog="cocapn-supervise", description="Minimal service supervisor"
+    )
     parser.add_argument("config", nargs="?", help="services.json file")
     parser.add_argument("--interval", type=int, default=10, help="Check interval in seconds")
     parser.add_argument("--dashboard", type=int, help="Dashboard port (default: none)")
@@ -198,4 +207,5 @@ def main():
 
 if __name__ == "__main__":
     import argparse
+
     main()

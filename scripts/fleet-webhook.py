@@ -6,11 +6,12 @@ Usage:
     python fleet-webhook.py --webhook https://hooks.example.com/fleet --interval 60
     python fleet-webhook.py --test --webhook https://hooks.example.com/fleet
 """
+
 import argparse
 import json
-import urllib.request
 import time
-from typing import Dict, List, Any
+import urllib.request
+from typing import Any
 
 # Fleet services to monitor
 SERVICES = [
@@ -48,7 +49,7 @@ def check_service(name: str, port: int, path: str) -> bool:
         return False
 
 
-def send_webhook(webhook_url: str, payload: Dict[str, Any]) -> bool:
+def send_webhook(webhook_url: str, payload: dict[str, Any]) -> bool:
     try:
         body = json.dumps(payload).encode()
         req = urllib.request.Request(
@@ -67,19 +68,19 @@ def send_webhook(webhook_url: str, payload: Dict[str, Any]) -> bool:
 def run_monitor(webhook_url: str, interval: int = 60):
     """Monitor fleet and send alerts on state changes."""
     previous = {}
-    
+
     print(f"Monitoring fleet every {interval}s. Webhook: {webhook_url}")
     print("Ctrl+C to stop.\n")
-    
+
     try:
         while True:
             changes = []
             current = {}
-            
+
             for name, port, path in SERVICES:
                 up = check_service(name, port, path)
                 current[name] = up
-                
+
                 if name in previous:
                     if up and not previous[name]:
                         changes.append({"service": name, "change": "UP", "port": port})
@@ -89,23 +90,23 @@ def run_monitor(webhook_url: str, interval: int = 60):
                     # First run
                     if not up:
                         changes.append({"service": name, "change": "DOWN", "port": port})
-            
+
             if changes:
                 up_count = sum(1 for v in current.values() if v)
                 down_count = len(current) - up_count
-                
+
                 payload = {
                     "event": "fleet_state_change",
                     "timestamp": time.time(),
                     "summary": {"up": up_count, "down": down_count, "total": len(current)},
                     "changes": changes,
                 }
-                
+
                 print(f"[{time.strftime('%H:%M:%S')}] {len(changes)} changes detected")
                 for c in changes:
                     emoji = "🟢" if c["change"] == "UP" else "🔴"
                     print(f"  {emoji} {c['service']} is now {c['change']}")
-                
+
                 if send_webhook(webhook_url, payload):
                     print("  ✓ Webhook sent")
                 else:
@@ -117,13 +118,17 @@ def run_monitor(webhook_url: str, interval: int = 60):
                     payload = {
                         "event": "fleet_heartbeat",
                         "timestamp": time.time(),
-                        "summary": {"up": up_count, "down": len(current) - up_count, "total": len(current)},
+                        "summary": {
+                            "up": up_count,
+                            "down": len(current) - up_count,
+                            "total": len(current),
+                        },
                     }
                     send_webhook(webhook_url, payload)
-            
+
             previous = current
             time.sleep(interval)
-    
+
     except KeyboardInterrupt:
         print("\nStopped.")
 
@@ -148,7 +153,7 @@ def main():
     parser.add_argument("--interval", type=int, default=60, help="Check interval in seconds")
     parser.add_argument("--test", action="store_true", help="Send test notification and exit")
     args = parser.parse_args()
-    
+
     if args.test:
         test_webhook(args.webhook)
     else:

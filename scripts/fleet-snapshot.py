@@ -7,6 +7,7 @@ Usage:
 
 Fetches live fleet data and produces a standalone HTML page.
 """
+
 import argparse
 import json
 import urllib.request
@@ -50,15 +51,15 @@ def generate_html() -> str:
         ("Matrix Bridge", 6168, "/status"),
         ("Conduwuit", 6167, "/"),
     ]
-    
+
     rows = []
     up_count = 0
-    
+
     for name, port, path in services:
         data = fetch_status(port, path)
         has_error = "_error" in data
         is_html = "_html" in data
-        
+
         if has_error:
             status = "🔴 DOWN"
             detail = str(data["_error"])[:80]
@@ -70,12 +71,20 @@ def generate_html() -> str:
             status = "🟢 UP"
             # Extract key metrics
             metrics = []
-            for key in ["rooms", "tiles", "total_rules", "total_matches", "total_players", "streams", "drills"]:
+            for key in [
+                "rooms",
+                "tiles",
+                "total_rules",
+                "total_matches",
+                "total_players",
+                "streams",
+                "drills",
+            ]:
                 if key in data:
                     metrics.append(f"{key}={data[key]}")
             detail = ", ".join(metrics) if metrics else "JSON response"
             up_count += 1
-        
+
         rows.append(f"""
         <tr>
             <td>{name}</td>
@@ -83,7 +92,7 @@ def generate_html() -> str:
             <td>{status}</td>
             <td><pre>{detail}</pre></td>
         </tr>""")
-    
+
     html = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -115,12 +124,16 @@ pre {{ margin: 0; font-size: .75rem; color: #8A93B4; }}
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="fleet-snapshot", description="Generate static HTML fleet snapshot")
-    parser.add_argument("--output", default="fleet-snapshot.html", help="Output file (- for stdout)")
+    parser = argparse.ArgumentParser(
+        prog="fleet-snapshot", description="Generate static HTML fleet snapshot"
+    )
+    parser.add_argument(
+        "--output", default="fleet-snapshot.html", help="Output file (- for stdout)"
+    )
     args = parser.parse_args()
-    
+
     html = generate_html()
-    
+
     if args.output == "-":
         print(html)
     else:

@@ -2,12 +2,13 @@
 
 Maximum capability in minimum lines. No external dependencies beyond stdlib + asyncio.
 """
+
+import fnmatch
 import json
 import re
-import fnmatch
-from typing import List, Dict, Any, Optional, Callable
-from datetime import datetime
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 
 class QueryEngine:
@@ -29,20 +30,20 @@ class QueryEngine:
         "in": lambda rec, k, v: rec.get(k) in v if isinstance(v, (list, tuple, set)) else False,
     }
 
-    def __init__(self, store_dir: str, indexes: Dict[str, List[str]] = None):
+    def __init__(self, store_dir: str, indexes: dict[str, list[str]] = None):
         self.dir = Path(store_dir)
         self.indexes = indexes or {}
 
     def _path(self, table: str) -> Path:
         return self.dir / f"{table}.jsonl"
 
-    def _scan(self, table: str, predicate: Callable[[Dict], bool]) -> List[Dict]:
+    def _scan(self, table: str, predicate: Callable[[dict], bool]) -> list[dict]:
         """Iterate a JSONL file, yielding records that match predicate."""
         path = self._path(table)
         if not path.exists():
             return []
         results = []
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             for line in f:
                 if not line.strip():
                     continue
@@ -54,7 +55,7 @@ class QueryEngine:
                     continue
         return results
 
-    def _compile_where(self, where: Optional[Dict[str, Any]]) -> Callable[[Dict], bool]:
+    def _compile_where(self, where: dict[str, Any] | None) -> Callable[[dict], bool]:
         """Compile a where clause into a predicate function.
 
         Where clause formats:
@@ -75,7 +76,7 @@ class QueryEngine:
         preds = [self._compile_clause({k: v}) for k, v in where.items()]
         return lambda rec: all(p(rec) for p in preds)
 
-    def _compile_clause(self, clause: Dict) -> Callable[[Dict], bool]:
+    def _compile_clause(self, clause: dict) -> Callable[[dict], bool]:
         """Compile a single field clause."""
         field, spec = next(iter(clause.items()))
 
@@ -93,13 +94,13 @@ class QueryEngine:
     def query(
         self,
         table: str,
-        where: Optional[Dict[str, Any]] = None,
-        sort: Optional[List[tuple]] = None,
+        where: dict[str, Any] | None = None,
+        sort: list[tuple] | None = None,
         limit: int = 50,
         offset: int = 0,
-        q: Optional[str] = None,
-        q_fields: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        q: str | None = None,
+        q_fields: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Execute a rich query against a JSONL table.
 
         Args:
@@ -124,10 +125,14 @@ class QueryEngine:
             q_lower = q.lower()
             search_fields = q_fields or []  # auto-detect if empty
 
-            def ft_predicate(rec: Dict) -> bool:
+            def ft_predicate(rec: dict) -> bool:
                 if not predicate(rec):
                     return False
-                fields = search_fields if search_fields else [k for k, v in rec.items() if isinstance(v, str)]
+                fields = (
+                    search_fields
+                    if search_fields
+                    else [k for k, v in rec.items() if isinstance(v, str)]
+                )
                 return any(q_lower in str(rec.get(f, "")).lower() for f in fields)
 
             results = self._scan(table, ft_predicate)
@@ -138,6 +143,7 @@ class QueryEngine:
 
         # Sort
         if sort:
+
             def sort_key(rec):
                 keys = []
                 for field, direction in sort:
@@ -153,7 +159,7 @@ class QueryEngine:
             results.sort(key=sort_key, reverse=reverse)
 
         # Paginate
-        paginated = results[offset:offset + limit]
+        paginated = results[offset : offset + limit]
 
         return {
             "results": paginated,
@@ -166,14 +172,14 @@ class QueryEngine:
         self,
         table: str,
         group_by: str,
-        metrics: Optional[List[str]] = None,
-        where: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+        metrics: list[str] | None = None,
+        where: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         """Simple aggregation: GROUP BY field with COUNT, and optional SUM/AVG metrics."""
         results = self._scan(table, self._compile_where(where))
         metrics = metrics or ["count"]
 
-        groups: Dict[str, Dict[str, Any]] = {}
+        groups: dict[str, dict[str, Any]] = {}
         for rec in results:
             key = str(rec.get(group_by, "_null"))
             if key not in groups:

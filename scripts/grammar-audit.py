@@ -7,6 +7,7 @@ Usage:
 
 Fetches both endpoints and reports the blind spot.
 """
+
 import argparse
 import json
 import urllib.request
@@ -24,15 +25,15 @@ def fetch_json(url: str) -> dict:
 def analyze() -> dict:
     engine = fetch_json(ENGINE_URL)
     compactor = fetch_json(COMPACTOR_URL)
-    
+
     engine_total = engine.get("total_rules", 0)
     compactor_total = compactor.get("total_rules", 0)
     delta = engine_total - compactor_total
-    
+
     # Type breakdown
     engine_by_type = engine.get("by_type", {})
     compactor_by_type = compactor.get("by_type", {})
-    
+
     type_comparison = {}
     all_types = set(engine_by_type.keys()) | set(compactor_by_type.keys())
     for t in sorted(all_types):
@@ -44,7 +45,7 @@ def analyze() -> dict:
             "delta": e_count - c_count,
             "pct_visible": round(c_count / e_count * 100, 1) if e_count > 0 else 0,
         }
-    
+
     return {
         "engine_total": engine_total,
         "compactor_total": compactor_total,
@@ -73,47 +74,53 @@ def report(data: dict) -> str:
         "| Type | Engine | Compactor | Delta | % Visible |",
         "|------|--------|-----------|-------|-----------|",
     ]
-    
+
     for t, info in data["by_type"].items():
         lines.append(
             f"| {t} | {info['engine']} | {info['compactor']} | {info['delta']} | {info['pct_visible']}% |"
         )
-    
-    lines.extend([
-        "",
-        "## Assessment",
-        "",
-        f"The compactor only sees **{data['pct_visible']}%** of the grammar rule space.",
-        f"**{data['delta']} rules** are invisible to compaction, meaning they accumulate indefinitely.",
-        "",
-        "## Likely Causes",
-        "",
-        "1. Compactor reads from a different data file or cache than the engine",
-        "2. Rules are added to engine DB but compactor is not notified to refresh",
-        "3. Compactor and engine have divergent storage paths",
-        "",
-        "## Fix",
-        "",
-        "Verify both services point to the same rule database file.",
-        "If they use different files, configure them to share one source of truth.",
-    ])
-    
+
+    lines.extend(
+        [
+            "",
+            "## Assessment",
+            "",
+            f"The compactor only sees **{data['pct_visible']}%** of the grammar rule space.",
+            f"**{data['delta']} rules** are invisible to compaction, meaning they accumulate indefinitely.",
+            "",
+            "## Likely Causes",
+            "",
+            "1. Compactor reads from a different data file or cache than the engine",
+            "2. Rules are added to engine DB but compactor is not notified to refresh",
+            "3. Compactor and engine have divergent storage paths",
+            "",
+            "## Fix",
+            "",
+            "Verify both services point to the same rule database file.",
+            "If they use different files, configure them to share one source of truth.",
+        ]
+    )
+
     return "\n".join(lines)
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="grammar-audit", description="Compare engine vs compactor")
+    parser = argparse.ArgumentParser(
+        prog="grammar-audit", description="Compare engine vs compactor"
+    )
     parser.add_argument("--output", help="JSON output file")
-    parser.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output format")
+    parser.add_argument(
+        "--format", choices=["markdown", "json"], default="markdown", help="Output format"
+    )
     args = parser.parse_args()
-    
+
     data = analyze()
-    
+
     if args.format == "json":
         out = json.dumps(data, indent=2)
     else:
         out = report(data)
-    
+
     if args.output:
         with open(args.output, "w") as f:
             f.write(out)

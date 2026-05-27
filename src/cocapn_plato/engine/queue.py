@@ -2,36 +2,42 @@
 
 Maximum capability in minimum lines. In-memory + JSONL persistence.
 """
+
 import json
-import time
 import uuid
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from typing import Any
 
 
 @dataclass
 class Task:
     id: str
     status: str  # pending, running, done, failed
-    payload: Dict[str, Any]
-    result: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
+    payload: dict[str, Any]
+    result: dict[str, Any] | None = None
+    error: str | None = None
     attempts: int = 0
     max_attempts: int = 3
     created_at: float = field(default_factory=lambda: datetime.now().timestamp())
-    started_at: Optional[float] = None
-    completed_at: Optional[float] = None
-    worker: Optional[str] = None
+    started_at: float | None = None
+    completed_at: float | None = None
+    worker: str | None = None
     priority: int = 0  # Higher = more urgent
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "Task":
-        return cls(**{k: v for k, v in d.items() if k in {f.name for f in cls.__dataclass_fields__.values()}})
+    def from_dict(cls, d: dict[str, Any]) -> "Task":
+        return cls(
+            **{
+                k: v
+                for k, v in d.items()
+                if k in {f.name for f in cls.__dataclass_fields__.values()}
+            }
+        )
 
 
 class TaskQueue:
@@ -39,7 +45,7 @@ class TaskQueue:
 
     def __init__(self, path: str = "./fleet_data/tasks.jsonl"):
         self.path = path
-        self.tasks: Dict[str, Task] = {}
+        self.tasks: dict[str, Task] = {}
         self._load()
 
     def _load(self):
@@ -56,7 +62,13 @@ class TaskQueue:
             for task in self.tasks.values():
                 f.write(json.dumps(task.to_dict(), default=str) + "\n")
 
-    def submit(self, payload: Dict[str, Any], priority: int = 0, tags: List[str] = None, max_attempts: int = 3) -> Task:
+    def submit(
+        self,
+        payload: dict[str, Any],
+        priority: int = 0,
+        tags: list[str] = None,
+        max_attempts: int = 3,
+    ) -> Task:
         task = Task(
             id=str(uuid.uuid4())[:8],
             status="pending",
@@ -69,11 +81,13 @@ class TaskQueue:
         self._save()
         return task
 
-    def claim(self, worker: str = "anonymous", tags: List[str] = None) -> Optional[Task]:
+    def claim(self, worker: str = "anonymous", tags: list[str] = None) -> Task | None:
         """Claim the highest-priority pending task."""
         candidates = [
-            t for t in self.tasks.values()
-            if t.status == "pending" and t.attempts < t.max_attempts
+            t
+            for t in self.tasks.values()
+            if t.status == "pending"
+            and t.attempts < t.max_attempts
             and (not tags or any(tag in t.tags for tag in tags))
         ]
         if not candidates:
@@ -86,7 +100,7 @@ class TaskQueue:
         self._save()
         return task
 
-    def complete(self, task_id: str, result: Dict[str, Any] = None) -> Optional[Task]:
+    def complete(self, task_id: str, result: dict[str, Any] = None) -> Task | None:
         task = self.tasks.get(task_id)
         if not task:
             return None
@@ -96,7 +110,7 @@ class TaskQueue:
         self._save()
         return task
 
-    def fail(self, task_id: str, error: str = "") -> Optional[Task]:
+    def fail(self, task_id: str, error: str = "") -> Task | None:
         task = self.tasks.get(task_id)
         if not task:
             return None
@@ -109,14 +123,14 @@ class TaskQueue:
         self._save()
         return task
 
-    def list(self, status: str = None, limit: int = 50) -> List[Task]:
+    def list(self, status: str = None, limit: int = 50) -> list[Task]:
         tasks = list(self.tasks.values())
         if status:
             tasks = [t for t in tasks if t.status == status]
         tasks.sort(key=lambda t: t.created_at, reverse=True)
         return tasks[:limit]
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         counts = {}
         for t in self.tasks.values():
             counts[t.status] = counts.get(t.status, 0) + 1

@@ -15,13 +15,13 @@ services.json example:
   ]
 }
 """
+
 import argparse
 import json
 import subprocess
+import sys
 import time
 import urllib.request
-import sys
-from typing import Dict, List, Optional
 from dataclasses import dataclass
 
 
@@ -30,9 +30,9 @@ class ServiceDef:
     name: str
     port: int
     cmd: str
-    cwd: Optional[str] = None
-    env: Optional[Dict[str, str]] = None
-    depends_on: List[str] = None
+    cwd: str | None = None
+    env: dict[str, str] | None = None
+    depends_on: list[str] = None
     timeout: float = 30.0
     retries: int = 3
 
@@ -51,13 +51,13 @@ def probe(host: str, port: int, path: str = "/", timeout: float = 5.0) -> bool:
         return False
 
 
-def start_service(svc: ServiceDef, host: str = "127.0.0.1") -> Optional[subprocess.Popen]:
+def start_service(svc: ServiceDef, host: str = "127.0.0.1") -> subprocess.Popen | None:
     """Start a service process."""
     print(f"Starting {svc.name} on port {svc.port}...")
     env = dict(os.environ)
     if svc.env:
         env.update(svc.env)
-    
+
     proc = subprocess.Popen(
         svc.cmd,
         shell=True,
@@ -66,7 +66,7 @@ def start_service(svc: ServiceDef, host: str = "127.0.0.1") -> Optional[subproce
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    
+
     # Wait for it to come up
     for attempt in range(svc.retries):
         time.sleep(2)
@@ -74,7 +74,7 @@ def start_service(svc: ServiceDef, host: str = "127.0.0.1") -> Optional[subproce
             print(f"  ✅ {svc.name} up on port {svc.port}")
             return proc
         print(f"  ⏳ {svc.name} not ready yet (attempt {attempt + 1}/{svc.retries})")
-    
+
     print(f"  ❌ {svc.name} failed to start on port {svc.port}")
     return proc
 
@@ -110,36 +110,36 @@ def stop_service(name: str, port: int, host: str = "127.0.0.1") -> bool:
             print(f"  ℹ️ No process found on port {port}")
             return True
     except FileNotFoundError:
-        print(f"  ⚠️ lsof not found, trying fuser...")
+        print("  ⚠️ lsof not found, trying fuser...")
         try:
             subprocess.run(["fuser", "-k", f"{port}/tcp"], capture_output=True)
             return True
         except FileNotFoundError:
-            print(f"  ❌ Cannot find process killer. Install lsof or fuser.")
+            print("  ❌ Cannot find process killer. Install lsof or fuser.")
             return False
 
 
-def load_config(path: str) -> List[ServiceDef]:
+def load_config(path: str) -> list[ServiceDef]:
     with open(path) as f:
         data = json.load(f)
     return [ServiceDef(**svc) for svc in data.get("services", [])]
 
 
-def sort_by_dependencies(services: List[ServiceDef]) -> List[ServiceDef]:
+def sort_by_dependencies(services: list[ServiceDef]) -> list[ServiceDef]:
     """Topological sort by dependencies."""
     by_name = {s.name: s for s in services}
     visited = set()
     result = []
-    
+
     def visit(svc: ServiceDef):
         if svc.name in visited:
             return
         visited.add(svc.name)
-        for dep in (svc.depends_on or []):
+        for dep in svc.depends_on or []:
             if dep in by_name:
                 visit(by_name[dep])
         result.append(svc)
-    
+
     for svc in services:
         visit(svc)
     return result
@@ -167,7 +167,7 @@ def diagnose(host: str = "147.224.38.131"):
         ("Task Queue", 8900, "/"),
         ("Steward", 8901, "/"),
     ]
-    
+
     print(f"\n{'Service':<20} {'Port':<6} {'Status':<10} {'Response'}")
     print("-" * 60)
     down = []
@@ -178,39 +178,47 @@ def diagnose(host: str = "147.224.38.131"):
         print(f"{name:<20} {port:<6} {status:<10} {resp}")
         if not ok:
             down.append((name, port))
-    
-    print(f"\n{'='*60}")
+
+    print(f"\n{'=' * 60}")
     print(f"Summary: {len(known_services) - len(down)}/{len(known_services)} up, {len(down)} down")
     if down:
-        print(f"\nDown services:")
+        print("\nDown services:")
         for name, port in down:
             print(f"  - {name} (port {port})")
-        print(f"\nTo restart, run:")
-        print(f"  python fleet-orchestrator.py --restart {' '.join(name.replace(' ', '-').lower() for name, _ in down)}")
+        print("\nTo restart, run:")
+        print(
+            f"  python fleet-orchestrator.py --restart {' '.join(name.replace(' ', '-').lower() for name, _ in down)}"
+        )
     return down
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="fleet-orchestrator", description="Fleet deployment orchestrator")
+    parser = argparse.ArgumentParser(
+        prog="fleet-orchestrator", description="Fleet deployment orchestrator"
+    )
     parser.add_argument("--config", help="services.json config file")
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind services")
-    parser.add_argument("--start-all", action="store_true", help="Start all services in dependency order")
+    parser.add_argument(
+        "--start-all", action="store_true", help="Start all services in dependency order"
+    )
     parser.add_argument("--restart", nargs="+", help="Restart specific services")
     parser.add_argument("--stop", nargs="+", help="Stop specific services")
-    parser.add_argument("--diagnose", action="store_true", help="Diagnose fleet health without starting")
+    parser.add_argument(
+        "--diagnose", action="store_true", help="Diagnose fleet health without starting"
+    )
     args = parser.parse_args()
-    
+
     if args.diagnose:
         diagnose()
         return
-    
+
     if not args.config:
         print("Error: --config required unless using --diagnose")
         sys.exit(1)
-    
+
     services = load_config(args.config)
     by_name = {s.name: s for s in services}
-    
+
     if args.restart:
         to_restart = []
         for name in args.restart:
@@ -223,23 +231,24 @@ def main():
             stop_service(svc.name, svc.port, args.host)
         for svc in sort_by_dependencies(to_restart):
             start_service(svc, args.host)
-    
+
     elif args.stop:
         for name in args.stop:
             if name in by_name:
                 stop_service(by_name[name].name, by_name[name].port, args.host)
-    
+
     elif args.start_all:
         ordered = sort_by_dependencies(services)
         for svc in ordered:
             start_service(svc, args.host)
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("All services started. Run --diagnose to verify.")
-    
+
     else:
         parser.print_help()
 
 
 if __name__ == "__main__":
     import os
+
     main()

@@ -1,14 +1,16 @@
 """SDK Client — Python consumer for the Cocapn PLATO query API."""
+
 import json
 import urllib.request
-from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
 class QueryResult:
     """Typed query response."""
-    results: List[Dict[str, Any]]
+
+    results: list[dict[str, Any]]
     total: int
     limit: int
     offset: int
@@ -27,7 +29,7 @@ class PlatoClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
-    def _request(self, method: str, path: str, data: Optional[Dict] = None) -> Dict[str, Any]:
+    def _request(self, method: str, path: str, data: dict | None = None) -> dict[str, Any]:
         url = f"{self.base_url}{path}"
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
 
@@ -46,14 +48,14 @@ class PlatoClient:
     def query(
         self,
         table: str = "tiles",
-        where: Optional[Dict[str, Any]] = None,
-        sort: Optional[List[tuple]] = None,
+        where: dict[str, Any] | None = None,
+        sort: list[tuple] | None = None,
         limit: int = 50,
         offset: int = 0,
-        q: Optional[str] = None,
+        q: str | None = None,
     ) -> QueryResult:
         """Query tiles with rich filtering and pagination.
-        
+
         Falls back to /export on older PLATO servers that don't have /query.
         """
         payload = {
@@ -80,7 +82,7 @@ class PlatoClient:
 
         # Fallback: old PLATO API via /export
         export = self._request("GET", "/export/plato-tile-spec")
-        
+
         # Try multiple possible tile locations in export response
         tiles = []
         if isinstance(export, list):
@@ -93,10 +95,10 @@ class PlatoClient:
             # If no list found, check if the dict itself is a single tile
             if not tiles and "question" in export:
                 tiles = [export]
-        
+
         if not tiles:
             return QueryResult(results=[], total=0, limit=limit, offset=offset)
-        
+
         # Apply filters client-side (skip if tile format doesn't match)
         filtered = tiles
         if where:
@@ -107,34 +109,30 @@ class PlatoClient:
                         filtered = [t for t in filtered if t.get(field) == val]
                     elif op == "regex":
                         import re
+
                         filtered = [t for t in filtered if re.search(val, str(t.get(field, "")))]
                     elif op == "contains":
                         filtered = [t for t in filtered if val in str(t.get(field, ""))]
                 else:
                     filtered = [t for t in filtered if t.get(field) == spec]
-        
+
         if q:
             q_lower = q.lower()
             filtered = [
-                t for t in filtered 
+                t for t in filtered
                 if any(q_lower in str(v).lower() for v in t.values() if isinstance(v, str))
             ]
-        elif q:
-            q_lower = q.lower()
-            filtered = [
-                t for t in filtered 
-                if any(q_lower in str(v).lower() for v in t.values() if isinstance(v, str))
-            ]
-        
+
         # Apply sort client-side
+
         if sort:
             for field, direction in reversed(sort):
                 reverse = direction.lower() == "desc"
                 filtered.sort(key=lambda t: t.get(field, 0), reverse=reverse)
-        
+
         total = len(filtered)
-        paginated = filtered[offset:offset + limit]
-        
+        paginated = filtered[offset : offset + limit]
+
         return QueryResult(
             results=paginated,
             total=total,
@@ -142,7 +140,7 @@ class PlatoClient:
             offset=offset,
         )
 
-    def get_tile(self, domain: str, question: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def get_tile(self, domain: str, question: str | None = None) -> dict[str, Any] | None:
         """Fetch a single tile by domain + optional question match."""
         where = {"domain": domain}
         if question:
@@ -150,13 +148,13 @@ class PlatoClient:
         result = self.query(where=where, limit=1)
         return result.results[0] if result.results else None
 
-    def list_domains(self) -> List[str]:
+    def list_domains(self) -> list[str]:
         """List all unique tile domains."""
         # Try aggregate endpoint first
         result = self._request("POST", "/aggregate", {"table": "tiles", "group_by": "domain"})
         if isinstance(result, list) and result and "_key" in result[0]:
             return [r["_key"] for r in result]
-        
+
         # Fallback: scan all tiles and extract unique domains client-side
         qr = self.query(limit=500)
         domains = set()
@@ -166,17 +164,23 @@ class PlatoClient:
                 domains.add(d)
         return sorted(domains)
 
-    def health(self) -> Dict[str, Any]:
+    def health(self) -> dict[str, Any]:
         return self._request("GET", "/health")
 
-    def status(self) -> Dict[str, Any]:
+    def status(self) -> dict[str, Any]:
         return self._request("GET", "/status")
 
-    def submit(self, agent: str, question: str, answer: str, domain: str = "general") -> Dict[str, Any]:
+    def submit(
+        self, agent: str, question: str, answer: str, domain: str = "general"
+    ) -> dict[str, Any]:
         """Submit a tile."""
-        return self._request("POST", "/submit", {
-            "agent": agent,
-            "question": question,
-            "answer": answer,
-            "domain": domain,
-        })
+        return self._request(
+            "POST",
+            "/submit",
+            {
+                "agent": agent,
+                "question": question,
+                "answer": answer,
+                "domain": domain,
+            },
+        )

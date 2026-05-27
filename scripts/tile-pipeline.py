@@ -8,11 +8,11 @@ Usage:
     python tile-pipeline.py --agent YourName --domain harbor --explore 5
     python tile-pipeline.py --agent YourName --domain harbor --rooms harbor,forge,tide-pool
 """
+
 import argparse
 import json
-import urllib.request
 import re
-from typing import List, Dict, Any
+import urllib.request
 
 MUD_URL = "http://147.224.38.131:4042"
 PLATO_URL = "http://147.224.38.131:8847"
@@ -60,7 +60,7 @@ def mud_examine(token: str, obj: str) -> str:
         return ""
 
 
-def extract_exits(text: str) -> List[str]:
+def extract_exits(text: str) -> list[str]:
     """Extract exit directions from MUD text."""
     # Common MUD exit patterns
     patterns = [
@@ -76,7 +76,7 @@ def extract_exits(text: str) -> List[str]:
     return []
 
 
-def extract_objects(text: str) -> List[str]:
+def extract_objects(text: str) -> list[str]:
     """Extract object names from MUD text."""
     patterns = [
         r"You see:\s*([\w\s,]+)",
@@ -119,31 +119,41 @@ def plato_submit(agent: str, domain: str, question: str, answer: str) -> bool:
         return False
 
 
-def generate_tiles(agent: str, domain: str, room_name: str, room_desc: str, exits: List[str], objects: List[str]) -> List[Dict[str, str]]:
+def generate_tiles(
+    agent: str, domain: str, room_name: str, room_desc: str, exits: list[str], objects: list[str]
+) -> list[dict[str, str]]:
     """Generate structured tiles from room data."""
     tiles = []
-    
+
     # Room tile
     if room_name:
-        tiles.append({
-            "question": f"What is the {room_name} room?",
-            "answer": room_desc or f"A room in the {domain} domain." + (f" It contains: {', '.join(objects)}." if objects else ""),
-        })
-    
+        tiles.append(
+            {
+                "question": f"What is the {room_name} room?",
+                "answer": room_desc
+                or f"A room in the {domain} domain."
+                + (f" It contains: {', '.join(objects)}." if objects else ""),
+            }
+        )
+
     # Exit tiles
     for exit_dir in exits:
-        tiles.append({
-            "question": f"Which direction leads from {room_name}?",
-            "answer": f"{exit_dir} — an exit from {room_name}.",
-        })
-    
+        tiles.append(
+            {
+                "question": f"Which direction leads from {room_name}?",
+                "answer": f"{exit_dir} — an exit from {room_name}.",
+            }
+        )
+
     # Object tiles
     for obj in objects:
-        tiles.append({
-            "question": f"What is the {obj} in {room_name}?",
-            "answer": f"An object found in the {room_name} room.",
-        })
-    
+        tiles.append(
+            {
+                "question": f"What is the {obj} in {room_name}?",
+                "answer": f"An object found in the {room_name} room.",
+            }
+        )
+
     return tiles
 
 
@@ -154,47 +164,47 @@ def explore(agent: str, domain: str, max_rooms: int = 5) -> int:
     if not token:
         print("  Failed to connect")
         return 0
-    
+
     print(f"  Connected. Token: {token[:8]}...")
-    
+
     visited = set()
     tiles_submitted = 0
     rooms_explored = 0
-    
+
     # Start with current room
-    current = ""
+    _current = ""
     queue = [""]
-    
+
     while queue and rooms_explored < max_rooms:
         # Look around
         room_text = mud_look(token)
-        
+
         # Extract room name from first line
         room_name = room_text.split("\n")[0].strip() if room_text else f"room-{rooms_explored}"
         room_desc = "\n".join(room_text.split("\n")[1:3]).strip() if room_text else ""
-        
+
         if room_name in visited:
             # Try next exit
             if queue:
                 direction = queue.pop(0)
                 mud_move(token, direction)
             continue
-        
+
         visited.add(room_name)
         rooms_explored += 1
-        
+
         print(f"  Room {rooms_explored}/{max_rooms}: {room_name}")
-        
+
         # Extract exits and objects
         exits = extract_exits(room_text)
         objects = extract_objects(room_text)
-        
+
         print(f"    Exits: {exits}")
         print(f"    Objects: {objects}")
-        
+
         # Generate tiles
         tiles = generate_tiles(agent, domain, room_name, room_desc, exits, objects)
-        
+
         # Submit tiles
         for tile in tiles:
             if plato_submit(agent, domain, tile["question"], tile["answer"]):
@@ -202,29 +212,31 @@ def explore(agent: str, domain: str, max_rooms: int = 5) -> int:
                 print(f"    ✓ Tile: {tile['question'][:50]}...")
             else:
                 print(f"    ✗ Failed: {tile['question'][:50]}...")
-        
+
         # Add new exits to queue
         for exit_dir in exits:
             if exit_dir not in visited:
                 queue.append(exit_dir)
-        
+
         # Move to next room
         if queue:
             direction = queue.pop(0)
             mud_move(token, direction)
-    
+
     print(f"\nDone: {rooms_explored} rooms, {tiles_submitted} tiles")
     return tiles_submitted
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="tile-pipeline", description="Auto-capture MUD exploration as PLATO tiles")
+    parser = argparse.ArgumentParser(
+        prog="tile-pipeline", description="Auto-capture MUD exploration as PLATO tiles"
+    )
     parser.add_argument("--agent", required=True, help="Agent name")
     parser.add_argument("--domain", default="harbor", help="PLATO domain")
     parser.add_argument("--explore", type=int, default=5, help="Number of rooms to explore")
     parser.add_argument("--rooms", help="Comma-separated room names (instead of auto-explore)")
     args = parser.parse_args()
-    
+
     if args.rooms:
         # Manual room list mode
         rooms = [r.strip() for r in args.rooms.split(",")]

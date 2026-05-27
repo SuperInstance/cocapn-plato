@@ -1,9 +1,6 @@
 """Tests for the tile migration pipeline."""
-import pytest
-from cocapn_plato.engine.migrate import (
-    normalize, normalize_all, dedup_exact, dedup_fuzzy,
-    score_tile, pipeline, _tile_signature
-)
+
+from cocapn_plato.engine.migrate import dedup_exact, dedup_fuzzy, normalize, pipeline, score_tile
 
 
 def test_normalize_basic():
@@ -106,14 +103,14 @@ def test_pipeline():
     ]
     result = pipeline(raw, fuzzy=False)
     stats = result["stats"]
-    
+
     assert stats["raw_count"] == 4
     assert stats["normalized_count"] == 3
     assert stats["unique_count"] == 2
     assert stats["dups_removed"] == 1
     assert stats["unrecoverable"] == 1
     assert stats["avg_quality"] > 0
-    
+
     # Should be sorted by quality
     tiles = result["tiles"]
     if len(tiles) >= 2:

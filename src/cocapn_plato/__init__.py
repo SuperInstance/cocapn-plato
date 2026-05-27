@@ -1,18 +1,19 @@
 """Cocapn Plato — Engine + SDK + Server for PLATO tile management."""
+
 __version__ = "3.2.0"
 
 from .engine.engine import Fleet
-from .engine.models import Agent, Context, Tile, Stream, Task
-from .engine.query import QueryEngine
+from .engine.models import Agent, Context, Stream, Task, Tile
 from .engine.plato_bridge import PlatoBridge
+from .engine.query import QueryEngine
 from .sdk.client import PlatoClient, QueryResult
 from .sdk.fleet import Fleet as SdkFleet
-from .sdk.skills import RateAwareSkill, UsageTracker, SkillUsage, SkillScore
+from .sdk.skills import RateAwareSkill, SkillScore, SkillUsage, UsageTracker
 
 __all__ = [
     "Fleet",
     "Agent",
-    "Context", 
+    "Context",
     "Tile",
     "Stream",
     "Task",
