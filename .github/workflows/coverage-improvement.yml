@@ -1,0 +1,139 @@
+name: Coverage Improvement
+
+on:
+  schedule:
+    # Sunday 2 AM UTC — adjust for your timezone as needed
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      max_gaps:
+        description: "Max gaps to target (default: 10)"
+        required: false
+        default: "10"
+      model:
+        description: "LiteLLM model to use"
+        required: false
+        default: "gpt-4o-mini"
+      budget:
+        description: "Max USD per run"
+        required: false
+        default: "5.0"
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  coverage-improvement:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install litellm>=1.0.0
+
+      - name: Run coverage baseline
+        id: baseline
+        run: |
+          python -m pytest --cov=cocapn_plato --cov-report=json --cov-report=term-missing -q
+          COVERAGE=$(python -c "import json; d=json.load(open('coverage.json')); print(d['totals']['percent_covered'])")
+          echo "coverage=$COVERAGE" >> "$GITHUB_OUTPUT"
+          echo "Current coverage: ${COVERAGE}%"
+
+      - name: Analyze coverage gaps
+        run: |
+          python -m scripts.cover_agent.generate_tests --analyze-only
+
+      - name: Generate tests via Cover-Agent
+        if: ${{ steps.baseline.outputs.coverage < 75.0 }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python -m scripts.cover_agent.generate_tests \
+            --max-gaps "${{ github.event.inputs.max_gaps || 10 }}" \
+            --model "${{ github.event.inputs.model || 'gpt-4o-mini' }}" \
+            --budget "${{ github.event.inputs.budget || 5.0 }}" \
+            --threshold 75.0 \
+            --no-promote
+
+      - name: Validate generated tests
+        if: ${{ steps.baseline.outputs.coverage < 75.0 }}
+        run: |
+          python -m scripts.cover_agent.generate_tests --validate-only || true
+
+      - name: Re-run coverage with generated tests
+        id: final
+        run: |
+          python -m pytest --cov=cocapn_plato --cov-report=json --cov-report=term-missing -q
+          COVERAGE=$(python -c "import json; d=json.load(open('coverage.json')); print(d['totals']['percent_covered'])")
+          echo "coverage=$COVERAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Count generated tests
+        id: count
+        run: |
+          GENERATED=$(find generated_tests -name "test_*.py" 2>/dev/null | wc -l)
+          echo "generated=$GENERATED" >> "$GITHUB_OUTPUT"
+
+      - name: Create PR with generated tests
+        if: ${{ steps.count.outputs.generated > 0 }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "test(cover-agent): auto-generated tests for coverage gaps"
+          title: "🤖 Cover-Agent: automated test generation"
+          body: |
+            **Cover-Agent automated test generation**
+
+            - Coverage before: **${{ steps.baseline.outputs.coverage }}%**
+            - Coverage after: **${{ steps.final.outputs.coverage }}%**
+            - Tests generated: **${{ steps.count.outputs.generated }}**
+
+            This PR was created automatically by the Cover-Agent workflow.
+            **Do not auto-merge** — human review required.
+          branch: cover-agent/tests-${{ github.run_id }}
+          base: main
+          add-paths: |
+            generated_tests/*.py
+            coverage_report/*.json
+
+      - name: Post summary comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const generated = '${{ steps.count.outputs.generated }}' || '0';
+            const baseline = '${{ steps.baseline.outputs.coverage }}' || '?';
+            const final = '${{ steps.final.outputs.coverage }}' || '?';
+            const body = `## 🤖 Cover-Agent Summary
+
+            | Metric | Value |
+            |--------|-------|
+            | Tests generated | ${generated} |
+            | Coverage before | ${baseline}% |
+            | Coverage after | ${final}% |
+            | Target | 75% |
+
+            ${generated > 0
+              ? '⏳ A PR has been opened for human review. **Do not auto-merge.**'
+              : '✅ No new tests were generated this run.'}
+            `;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+        continue-on-error: true

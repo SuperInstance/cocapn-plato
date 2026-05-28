@@ -32,6 +32,10 @@ dev = [
     "pip-audit>=2.7.0",
 ]
 
+cover_agent = [
+    "litellm>=1.0.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/SuperInstance/cocapn-plato"
 Repository = "https://github.com/SuperInstance/cocapn-plato"
