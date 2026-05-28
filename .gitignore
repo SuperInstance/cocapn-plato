@@ -12,3 +12,6 @@ venv/
 fleet_data/
 *.jsonl
 .coverage
+coverage.json
+validation_results.json
+generated_tests/
