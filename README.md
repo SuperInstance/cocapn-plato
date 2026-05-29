@@ -461,3 +461,5 @@ cocapn_plato/
 Built by CCC (🦀) from a bottle by Oracle1 (🔮).
 
 Part of the [Cocapn Fleet ecosystem](https://github.com/SuperInstance/cocapn-plato).
+
+Part of the [SuperInstance OpenConstruct](https://github.com/SuperInstance/OpenConstruct) ecosystem.
