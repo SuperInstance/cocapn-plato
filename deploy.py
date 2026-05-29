@@ -5,7 +5,6 @@ Run this on 147.224.38.131 to upgrade the PLATO server with query API.
 """
 import subprocess
 import sys
-import os
 from pathlib import Path
 
 REPO_URL = "https://github.com/SuperInstance/cocapn-plato.git"
@@ -46,13 +45,13 @@ def main():
 
     # Create systemd service or tmux session
     print("[4/5] Starting server...")
-    
+
     # Check if something is already on the port
     import urllib.request
     try:
         urllib.request.urlopen(f"http://localhost:{PORT}/health", timeout=2)
         print(f"  ⚠️  Port {PORT} already in use. Kill existing server first:")
-        print(f"     pkill -f 'cocapn_plato.server'")
+        print("     pkill -f 'cocapn_plato.server'")
     except:
         pass
 
@@ -60,9 +59,9 @@ def main():
     log_file = INSTALL_DIR / "server.log"
     cmd = f"cd {INSTALL_DIR} && PYTHONPATH=src nohup python3 -m cocapn_plato.server > {log_file} 2>&1 &"
     run(cmd)
-    
+
     print(f"  Server log: {log_file}")
-    
+
     # Health check
     print("[5/5] Health check...")
     import time

@@ -5,8 +5,8 @@ Pulls all tiles from old /export endpoint, normalizes them, writes to JSONL.
 """
 import json
 import urllib.request
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 OLD_PLATO = "http://147.224.38.131:8847"
 DATA_DIR = Path("./fleet_data")
@@ -18,7 +18,7 @@ def fetch_tiles():
     req = urllib.request.Request(f"{OLD_PLATO}/export/plato-tile-spec", headers={"Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         data = json.loads(resp.read().decode())
-    
+
     # Extract tiles from various possible formats
     if isinstance(data, list):
         return data
@@ -47,22 +47,22 @@ def normalize_tile(tile):
 def migrate():
     tiles = fetch_tiles()
     print(f"Fetched {len(tiles)} tiles")
-    
+
     if not tiles:
         print("No tiles to migrate.")
         return
-    
+
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     path = DATA_DIR / "tiles.jsonl"
-    
+
     # Append normalized tiles
     with open(path, "a") as f:
         for tile in tiles:
             normalized = normalize_tile(tile)
             f.write(json.dumps(normalized) + "\n")
-    
+
     print(f"Migrated {len(tiles)} tiles to {path}")
-    
+
     # Quick stats
     domains = {}
     agents = {}
@@ -71,17 +71,17 @@ def migrate():
         a = tile.get("agent") or tile.get("creator", "unknown")
         domains[d] = domains.get(d, 0) + 1
         agents[a] = agents.get(a, 0) + 1
-    
-    print(f"\nTop domains:")
+
+    print("\nTop domains:")
     for d, c in sorted(domains.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"  {d}: {c}")
-    
-    print(f"\nTop agents:")
+
+    print("\nTop agents:")
     for a, c in sorted(agents.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"  {a}: {c}")
-    
-    print(f"\nNext: start the server to query migrated tiles")
-    print(f"  python -m cocapn_plato.server")
+
+    print("\nNext: start the server to query migrated tiles")
+    print("  python -m cocapn_plato.server")
 
 
 if __name__ == "__main__":
