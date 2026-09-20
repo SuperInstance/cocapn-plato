@@ -7,11 +7,13 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi import Query as QueryParam
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 # Import from monorepo
 from ..engine.engine import Fleet
 from ..engine.plato_bridge import PlatoBridge
+from .agui import agui_event_stream, build_answer, extract_last_user_text
 
 # Singletons
 _fleet: Fleet | None = None
@@ -67,6 +69,14 @@ class BridgeQueryBody(BaseModel):
     q: str | None = None
     limit: int = 50
     offset: int = 0
+
+
+class AguiRunBody(BaseModel):
+    """AG-UI run request (CopilotKit protocol subset)."""
+
+    threadId: str
+    runId: str
+    messages: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # --- Route Factory ---
@@ -245,6 +255,36 @@ def create_app(fleet_instance: Fleet | None = None) -> FastAPI:
             "remote_count": len(remote.get("results", [])),
             "merged_count": len(merged),
         }
+
+    # --- AG-UI Endpoint (agent-UI protocol, SSE) ---
+
+    @app.get("/api/ag-ui")
+    async def agui_descriptor():
+        """Capability descriptor for the AG-UI endpoint."""
+        return {
+            "protocol": "ag-ui",
+            "version": "0.1.0",
+            "run_endpoint": "/api/ag-ui/run",
+            "transport": "text/event-stream",
+            "grounding": "fleet tile store only; no matches = honest negative",
+        }
+
+    @app.post("/api/ag-ui/run")
+    async def agui_run(body: AguiRunBody):
+        """Run one grounded turn: query the tile store, stream the answer."""
+        fleet = get_fleet()
+        query_text = extract_last_user_text(body.messages)
+        hits = []
+        if query_text:
+            result = await fleet.storage.query_rich(
+                table="tiles", q=query_text, limit=5
+            )
+            hits = result.get("results", [])
+        answer = build_answer(query_text, hits)
+        return StreamingResponse(
+            agui_event_stream(body.threadId, body.runId, answer),
+            media_type="text/event-stream",
+        )
 
     # --- Health & Status ---
 
